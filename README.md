@@ -18,7 +18,13 @@ specs.
 We also will collaborate actively with other Beam clients and collectively will push the protocol to maturity
 for consideration and deployment to ethereum blockchain.
 
-We are currently doing [POC of zig run time](https://github.com/blockblaz/zeam-runtime) with various ZK-VMs.
+We are currently doing various POCs/lib development:
+
+ - [POC of zig run time](https://github.com/blockblaz/zeam-runtime) with various ZK-VMs.
+ - [Snappy](https://github.com/blockblaz/zig-snappy) & [Snappy frames](https://github.com/blockblaz/snappyframesz)
+
+As we go along, we will also be maintaining important [resources](./resources/) related to beam protocol, ZK and
+ZK-VMs, and quantum security & updates.
 
 ### Zig Ecosystem
 
@@ -33,14 +39,14 @@ we can use and/or contribute to.
 
 Please join us on our community to take part in conversations around Beam Protocol and Zeam Client:
 
-- [zig (zig beam client) community](https://t.me/+jG1rkTwIuH5jN2Y1) telegram group
+- [zig (zig beam client) community](https://t.me/zeamETH) telegram group
 - [zeamETH](https://x.com/zeamETH) X(formerly twitter) handle
 
 ### Contributions
 
 Zeam will welcome opensource contributions that meaningfully further the development of Zeam client. Keep Watching
-out for this space for annoucements on the same or reach out to us via our [community telegram group](https://t.me/+jG1rkTwIuH5jN2Y1)
+out for this space for annoucements on the same or reach out to us via our [community telegram group](https://t.me/zeamETH)
 
 ### Reporting Issues
 
-Open an [issue or a bug](https://github.com/blockblaz/zeam/issues/new) or else talk to us via our [community telegram group](https://t.me/+jG1rkTwIuH5jN2Y1).
+Open an [issue or a bug](https://github.com/blockblaz/zeam/issues/new) or else talk to us via our [community telegram group](https://t.me/zeamETH).
