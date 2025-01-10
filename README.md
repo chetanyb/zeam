@@ -22,6 +22,8 @@ We are currently doing various POCs/lib development:
 
  - [POC of zig run time](https://github.com/blockblaz/zeam-runtime) with various ZK-VMs.
  - [Snappy](https://github.com/blockblaz/zig-snappy) & [Snappy frames](https://github.com/blockblaz/snappyframesz)
+ - [Zig <> rust libp2p interops](https://github.com/blockblaz/zig-libp2p-pocs)
+ - [Zig SSZ!](https://github.com/gballet/ssz.zig)
 
 As we go along, we will also be maintaining important [resources](./resources/) related to beam protocol, ZK and
 ZK-VMs, and quantum security & updates.
