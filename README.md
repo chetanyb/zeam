@@ -9,6 +9,10 @@ The heart of Beam Chain is to massively scale and decentralize ethereum consensu
 protocol via ZK-VMs but also bundles some of the disruptive ideas and learnings on ethereum consensus which are a
 bit harder to incrementally implement on the current Beacon Chain.
 
+## Beam Chain
+
+[Beam Chain Developments & Resources](./resources/beam.md)
+
 ## Client Development
 
 As is the ethos of ethereum community, beam protocol and specs will be developed in open. Zeam will not only
@@ -23,7 +27,7 @@ We are currently doing various POCs/lib development:
  - [POC of zig run time](https://github.com/blockblaz/zeam-runtime) with various ZK-VMs.
  - [Snappy](https://github.com/blockblaz/zig-snappy) & [Snappy frames](https://github.com/blockblaz/snappyframesz)
  - [Zig <> rust libp2p interops](https://github.com/blockblaz/zig-libp2p-pocs)
- - [Zig SSZ!](https://github.com/gballet/ssz.zig)
+ - [Zig SSZ!](https://github.com/blockblaz/ssz.zig)
 
 As we go along, we will also be maintaining important [resources](./resources/) related to beam protocol, ZK and
 ZK-VMs, and quantum security & updates.
