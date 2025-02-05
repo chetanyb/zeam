@@ -1,3 +1,3 @@
-# Zero Knowledge Resources
+# Zero-Knowledge Resources
 
 Coming Soon...

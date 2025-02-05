@@ -19,7 +19,9 @@
 
  - [Zig implementation with configurable Hash Fn](https://github.com/blockblaz/ssz.zig)
 
-3. Proof system
+3. Proof system(s)
+
+4. Enhanced P2P
 
 ## Spec
 

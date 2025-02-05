@@ -6,8 +6,8 @@ Beam Chain is a futuristic ZK based Ethereum Consensus Protocol first [unveiled 
 and is meant to upgrade the current Beacon Chain when ready. Zeam is its production grade implementation (wip).
 
 The heart of Beam Chain is to massively scale and decentralize ethereum consensus with provable and verifiable
-protocol via ZK-VMs but also bundles some of the disruptive ideas and learnings on ethereum consensus which are a
-bit harder to incrementally implement on the current Beacon Chain.
+protocol via ZK-VMs but also bundles some of the other disruptive ideas and learnings on ethereum consensus which 
+could be a bit harder to incrementally implement on the current Beacon Chain.
 
 ## Beam Chain
 
@@ -45,7 +45,7 @@ we can use and/or contribute to.
 
 Please join us on our community to take part in conversations around Beam Protocol and Zeam Client:
 
-- [zig (zig beam client) community](https://t.me/zeamETH) telegram group
+- [zeam community](https://t.me/zeamETH) telegram group
 - [zeamETH](https://x.com/zeamETH) X(formerly twitter) handle
 
 ### Contributions
