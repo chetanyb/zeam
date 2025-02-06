@@ -38,7 +38,7 @@ Zig despite being relatively new is an upcoming ecosystem stack for ethereum pro
 the stack towards maturity via our modular client approach as well as independent libraries development and
 contribution.
 
-Please reach out to us if you are actively enagaged in developing a library in the ecosystem that you may think
+Please reach out to us if you are actively engaged in developing a library in the ecosystem that you may think
 we can use and/or contribute to.
 
 ### Zeam community

@@ -1,7 +1,10 @@
 const Builder = @import("std").Build;
+const std = @import("std");
 
 pub fn build(b: *Builder) void {
-    const target = b.standardTargetOptions(.{});
+    const target_query = .{ .cpu_arch = .riscv32, .os_tag = .freestanding, .abi = .none, .cpu_model = .{ .explicit = &std.Target.riscv.cpu.generic_rv32 } };
+
+    const target = b.resolveTargetQuery(target_query);
     const optimize = b.standardOptimizeOption(.{});
 
     // add ssz
