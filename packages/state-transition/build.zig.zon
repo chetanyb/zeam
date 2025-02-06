@@ -1,5 +1,5 @@
 .{
-    .name = "zeam-state-transition-runtime",
+    .name = "zeam-state-transition",
     .version = "0.0.0",
     .dependencies = .{
         .@"ssz.zig" = .{
@@ -8,9 +8,6 @@
         },
         .@"zeam-types" = .{
             .path = "../types",
-        },
-        .@"zeam-state-transition" = .{
-            .path = "../state-transition",
         },
     },
     .paths = .{""},

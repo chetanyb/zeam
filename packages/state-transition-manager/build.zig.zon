@@ -1,5 +1,5 @@
 .{
-    .name = "zeam-state-transition-runtime",
+    .name = "zeam-state-proving-manager",
     .version = "0.0.0",
     .dependencies = .{
         .@"ssz.zig" = .{
@@ -11,6 +11,9 @@
         },
         .@"zeam-state-transition" = .{
             .path = "../state-transition",
+        },
+        .@"zeam-state-transition-runtime" = .{
+            .path = "../state-transition-runtime",
         },
     },
     .paths = .{""},
