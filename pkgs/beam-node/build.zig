@@ -25,8 +25,8 @@ pub fn build(b: *Builder) void {
         .optimize = optimize,
     }).module("zeam-state-transition-manager");
 
-    const mod = b.addModule("zeam-node", Builder.Module.CreateOptions{
-        .root_source_file = b.path("src/manager.zig"),
+    const mod = b.addModule("zeam-beam-node", Builder.Module.CreateOptions{
+        .root_source_file = b.path("src/node.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
@@ -39,15 +39,15 @@ pub fn build(b: *Builder) void {
     _ = mod;
 
     const lib = b.addStaticLibrary(.{
-        .name = "zeam-beam-chain",
-        .root_source_file = .{ .cwd_relative = "src/chain.zig" },
+        .name = "zeam-beam-node",
+        .root_source_file = .{ .cwd_relative = "src/node.zig" },
         .optimize = optimize,
         .target = target,
     });
     b.installArtifact(lib);
 
     const tests = b.addTest(.{
-        .root_source_file = .{ .cwd_relative = "src/chain.zig" },
+        .root_source_file = .{ .cwd_relative = "src/node.zig" },
         .optimize = optimize,
         .target = target,
     });

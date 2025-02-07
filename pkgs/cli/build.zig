@@ -25,7 +25,8 @@ pub fn build(b: *Builder) void {
         .target = target,
         .optimize = optimize,
     }).module("zeam-state-transition-manager");
-    const zeam_node = b.dependency("zeam-node", .{
+    // add beam node
+    const zeam_beam_node = b.dependency("zeam-beam-node", .{
         .target = target,
         .optimize = optimize,
     }).module("zeam-node");
@@ -39,7 +40,7 @@ pub fn build(b: *Builder) void {
             .{ .name = "zeam-types", .module = zeam_types },
             .{ .name = "zeam-state-transition", .module = zeam_state_transition },
             .{ .name = "zeam-state-transition-manager", .module = zeam_state_transition_manager },
-            .{ .name = "zeam-node", .module = zeam_node },
+            .{ .name = "zeam-beam-node", .module = zeam_beam_node },
         },
     });
     _ = mod;
@@ -55,6 +56,7 @@ pub fn build(b: *Builder) void {
     exe.root_module.addImport("ssz", ssz);
     exe.root_module.addImport("zeam-types", zeam_types);
     exe.root_module.addImport("zeam-state-transition", zeam_state_transition);
+    exe.root_module.addImport("zeam-beam-node", zeam_beam_node);
     b.installArtifact(exe);
 
     const tests = b.addTest(.{
@@ -65,6 +67,7 @@ pub fn build(b: *Builder) void {
     tests.root_module.addImport("ssz", ssz);
     tests.root_module.addImport("zeam-types", zeam_types);
     tests.root_module.addImport("zeam-transition-runtime", zeam_state_transition);
+    tests.root_module.addImport("zeam-beam-node", zeam_beam_node);
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run unit tests");

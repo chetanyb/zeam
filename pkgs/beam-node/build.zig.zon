@@ -1,5 +1,5 @@
 .{
-    .name = "zeam-node",
+    .name = "zeam-beam-node",
     .version = "0.0.0",
     .dependencies = .{
         .@"ssz.zig" = .{
