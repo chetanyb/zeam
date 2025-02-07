@@ -12,8 +12,8 @@
         .@"zeam-state-transition" = .{
             .path = "../state-transition",
         },
-        .@"zeam-state-transition-manager" = .{
-            .path = "../state-transition-manager",
+        .@"zeam-state-proving-manager" = .{
+            .path = "../state-proving-manager",
         },
     },
     .paths = .{""},

@@ -20,10 +20,10 @@ pub fn build(b: *Builder) void {
         .optimize = optimize,
     }).module("zeam-state-transition");
     // add state transition manager
-    const zeam_state_transition_manager = b.dependency("zeam-state-transition-manager", .{
+    const zeam_state_proving_manager = b.dependency("zeam-state-proving-manager", .{
         .target = target,
         .optimize = optimize,
-    }).module("zeam-state-transition-manager");
+    }).module("zeam-state-proving-manager");
 
     const mod = b.addModule("zeam-beam-node", Builder.Module.CreateOptions{
         .root_source_file = b.path("src/node.zig"),
@@ -33,7 +33,7 @@ pub fn build(b: *Builder) void {
             .{ .name = "ssz", .module = ssz },
             .{ .name = "zeam-types", .module = zeam_types },
             .{ .name = "zeam-state-transition", .module = zeam_state_transition },
-            .{ .name = "zeam-state-transition-manager", .module = zeam_state_transition_manager },
+            .{ .name = "zeam-state-proving-manager", .module = zeam_state_proving_manager },
         },
     });
     _ = mod;
@@ -54,7 +54,7 @@ pub fn build(b: *Builder) void {
     tests.root_module.addImport("ssz", ssz);
     tests.root_module.addImport("zeam-types", zeam_types);
     tests.root_module.addImport("zeam-state-transition", zeam_state_transition);
-    tests.root_module.addImport("zeam-state-transition-manager", zeam_state_transition);
+    tests.root_module.addImport("zeam-state-proving-manager", zeam_state_proving_manager);
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run unit tests");

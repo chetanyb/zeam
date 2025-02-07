@@ -21,7 +21,7 @@ pub fn build(b: *Builder) void {
     }).module("zeam-state-transition");
     // TODO build and install state transition runtime to run in zkVM
 
-    const mod = b.addModule("zeam-state-transition-manager", Builder.Module.CreateOptions{
+    const mod = b.addModule("zeam-state-proving-manager", Builder.Module.CreateOptions{
         .root_source_file = b.path("src/manager.zig"),
         .target = target,
         .optimize = optimize,
@@ -34,7 +34,7 @@ pub fn build(b: *Builder) void {
     _ = mod;
 
     const lib = b.addStaticLibrary(.{
-        .name = "zeam-state-transition-manager",
+        .name = "zeam-state-proving-manager",
         .root_source_file = .{ .cwd_relative = "src/manager.zig" },
         .optimize = optimize,
         .target = target,
