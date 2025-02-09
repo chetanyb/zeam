@@ -13,7 +13,8 @@ const Witnesses = struct {
     block: []const u8,
 };
 
-// code that runs in zkvm somehow accesses input and witnesses provided to the zkvm
+// implements risv5 runtime that runs in zkvm on provided inputs and witnesses to execute
+// and prove the state transition as imported from `pkgs/state-transition`
 pub fn main() noreturn {
     // access inputs and witnesses from zkvm
     const inputs = Inputs{

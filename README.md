@@ -22,12 +22,15 @@ specs.
 We also will collaborate actively with other Beam clients and collectively will push the protocol to maturity
 for consideration and deployment to ethereum blockchain.
 
-We are currently doing various POCs/lib development:
+We are currently doing various POCs/libs development:
 
  - [POC of zig run time](https://github.com/blockblaz/zeam-runtime) with various ZK-VMs.
  - [Snappy](https://github.com/blockblaz/zig-snappy) & [Snappy frames](https://github.com/blockblaz/snappyframesz)
  - [Zig <> rust libp2p interops](https://github.com/blockblaz/zig-libp2p-pocs)
  - [Zig SSZ!](https://github.com/blockblaz/ssz.zig)
+
+And all of these efforts culminating in a [ZEAM POC](./resources/zeam.md) with which we hope to aid in Beam Spec
+research especially with state transition proving.
 
 As we go along, we will also be maintaining important [resources](./resources/) related to beam protocol, ZK and
 ZK-VMs, and quantum security & updates.
