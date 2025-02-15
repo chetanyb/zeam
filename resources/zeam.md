@@ -1,11 +1,15 @@
-# Zeam POC
+# Zeam
+
+[Zeam Calls](https://github.com/blockblaz/zeam-community/issues?q=is%3Aissue%20state%3Aclosed)
+
+## Zeam Client POC
 
 While the Beam research community is working on Beam specs, we at Zeam are aiming to have a POC of one of
 the most (if not the most) critical elements of Beam Protocol:
 
 *State Transition Proving and non Enshrined Proofs*
 
-## Zeam Client Structure
+### Zeam Client Structure
 
 Zeam client structure closely follows Beacon client structure i.e. essential elements of Ethereum POS
 

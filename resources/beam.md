@@ -3,7 +3,7 @@
 - [Explainers](./explainers.md)
 - [News](./media.md)
 - [Zero-Knowledge](./zkp.md)
-- [Beam & Zeam Calls](./calls.md)
+- [Beam Calls](https://github.com/blockblaz/zeam-community/issues?q=is%3Aissue%20state%3Aclosed%20beam)
 
 
 ## Components
