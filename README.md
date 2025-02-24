@@ -28,6 +28,7 @@ We are currently doing various POCs/libs development:
  - [Snappy](https://github.com/blockblaz/zig-snappy) & [Snappy frames](https://github.com/blockblaz/snappyframesz)
  - [Zig <> rust libp2p interops](https://github.com/blockblaz/zig-libp2p-pocs)
  - [Zig SSZ!](https://github.com/blockblaz/ssz.zig)
+ - [Hash Signatures](https://github.com/blockblaz/hash-sigz)
 
 And all of these efforts culminating in a [ZEAM POC](./resources/zeam.md) with which we hope to aid in Beam Spec
 research especially with state transition proving.

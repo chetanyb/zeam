@@ -2,6 +2,8 @@
 
 [Zeam Calls](https://github.com/blockblaz/zeam-community/issues?q=is%3Aissue%20state%3Aclosed)
 
+[Zeam & Beam Wiki](https://github.com/blockblaz/zeam/wiki)
+
 ## Zeam Client POC
 
 While the Beam research community is working on Beam specs, we at Zeam are aiming to have a POC of one of

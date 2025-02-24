@@ -7,11 +7,11 @@ pub const utils = @import("./utils.zig");
 // setup a params repo sensitive to a preset
 const SLOTS_PER_EPOCH = 32;
 
-pub fn process_epoch(state: types.BeamState) void {
-    // right now nothing to do
-    _ = state;
-    return;
-}
+// pub fn process_epoch(state: types.BeamState) void {
+//     // right now nothing to do
+//     _ = state;
+//     return;
+// }
 
 // prepare the state to be the post-state of the slot
 pub fn process_slot(state: types.BeamState) void {
@@ -29,9 +29,10 @@ pub fn process_slot(state: types.BeamState) void {
 pub fn process_slots(state: types.BeamState, slot: types.Slot) void {
     while (state.slot < slot) {
         process_slot(state);
-        if ((state.slot + 1) % SLOTS_PER_EPOCH == 0) {
-            process_epoch(state);
-        }
+        // There might not be epoch processing in beam
+        // if ((state.slot + 1) % SLOTS_PER_EPOCH == 0) {
+        //     process_epoch(state);
+        // }
 
         state.slot += 1;
     }

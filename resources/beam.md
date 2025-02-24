@@ -1,10 +1,8 @@
 # Beam Chain
 
-- [Explainers](./explainers.md)
-- [News](./media.md)
-- [Zero-Knowledge](./zkp.md)
 - [Beam Calls](https://github.com/blockblaz/zeam-community/issues?q=is%3Aissue%20state%3Aclosed%20beam)
 
+[Zeam & Beam Wiki](https://github.com/blockblaz/zeam/wiki)
 
 ## Components
 
@@ -19,7 +17,7 @@
 
  - [Zig implementation with configurable Hash Fn](https://github.com/blockblaz/ssz.zig)
 
-3. Proof system(s)
+3. State transition Proving
 
 4. Enhanced P2P
 
