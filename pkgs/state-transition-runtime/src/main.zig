@@ -1,4 +1,6 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const ssz = @import("ssz");
 const types = @import("zeam-types");
 const state_transition = @import("zeam-state-transition");
@@ -34,8 +36,9 @@ pub fn main() noreturn {
     const state = types.BeamState{};
     const block = types.SignedBeamBlock{};
 
+    // get some allocator
     // apply the state transition to modify the state
-    state_transition.apply_transition(state, block);
+    state_transition.apply_transition(allocator, &state, block);
 
     // verify the block.state_root is ssz hash tree root of state
     // this completes our zkvm proving
