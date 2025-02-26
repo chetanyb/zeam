@@ -140,10 +140,12 @@ test "genesis and state transition" {
     // TODO clone
     try process_slots(std.testing.allocator, &test_genesis, block1.slot);
 
-    // 6. apply the block to the genesis
+    // 6. apply the block to the genesis and get & fill the post state root for the block
     try process_block(std.testing.allocator, &test_genesis, block1);
     try ssz.hashTreeRoot(types.BeamState, test_genesis, &block1_state_root, std.testing.allocator);
     block1.state_root = block1_state_root;
+
+    // 7. calc final block1 root which could be used in signing and creating the signed beam block
     var block1_root: [32]u8 = undefined;
     try ssz.hashTreeRoot(types.BeamBlock, block1, &block1_root, std.testing.allocator);
 
