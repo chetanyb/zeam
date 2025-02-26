@@ -20,7 +20,7 @@ pub fn process_slot(state: types.BeamState) void {
     // i.e. just after processing the lastest block of latest block header
     // this completes latest block header for parentRoot checks of new block
     if (std.mem.eql(state.lastest_block_header.state_root, utils.ZERO_HASH)) {
-        const prev_state_root = ssz.hash_tree_root(state);
+        const prev_state_root = ssz.hashTreeRoot(state);
         state.lastest_block_header.state_root = prev_state_root;
     }
 }
@@ -73,4 +73,12 @@ test "ssz import" {
 
     try ssz.serialize(u16, data, &list);
     try std.testing.expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+}
+
+test "genesis block util" {
+    const test_config = types.ChainConfig{
+        .genesis_time = 1234,
+    };
+    const test_genesis = utils.genGenesisState(std.testing.allocator, test_config);
+    std.debug.print("test_genesis: {any}", .{test_genesis});
 }

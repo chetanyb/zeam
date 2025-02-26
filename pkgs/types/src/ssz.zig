@@ -2,10 +2,12 @@ const ssz = @import("ssz");
 const std = @import("std");
 
 // just dummy type right now to test imports
-pub const Bytes32 = [:32]const u8;
+pub const Bytes32 = [32]u8;
 pub const Slot = u64;
 pub const ValidatorIndex = u64;
-pub const Bytes48 = [:48]const u8;
+pub const Bytes48 = [:48]u8;
+
+pub const ChainConfig = struct { genesis_time: u64 };
 
 pub const BeamBlockHeader = struct {
     slot: Slot,
@@ -15,6 +17,7 @@ pub const BeamBlockHeader = struct {
     body_root: Bytes32,
 };
 
+// empty block body
 pub const BeamBlockBody = struct {};
 
 pub const BeamBlock = struct {
@@ -36,6 +39,7 @@ pub const BeamState = struct {
     lastest_block_header: BeamBlockHeader,
 };
 
+// non ssz types, difference is the variable list doesn't need upper boundaries
 pub const ZkVm = enum {
     ceno,
     powdr,
