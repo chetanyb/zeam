@@ -1,5 +1,7 @@
 const ssz = @import("ssz");
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
 const types = @import("zeam-types");
 
 pub const utils = @import("./utils.zig");
@@ -14,21 +16,23 @@ const SLOTS_PER_EPOCH = 32;
 // }
 
 // prepare the state to be the post-state of the slot
-pub fn process_slot(state: types.BeamState) void {
+pub fn process_slot(allocator: Allocator, state: *types.BeamState) !void {
 
     // update state root in latest block header if its zero hash
     // i.e. just after processing the lastest block of latest block header
     // this completes latest block header for parentRoot checks of new block
-    if (std.mem.eql(state.lastest_block_header.state_root, utils.ZERO_HASH)) {
-        const prev_state_root = ssz.hashTreeRoot(state);
+
+    if (std.mem.eql(u8, &state.lastest_block_header.state_root, &utils.ZERO_HASH)) {
+        var prev_state_root: [32]u8 = undefined;
+        try ssz.hashTreeRoot(types.BeamState, state.*, &prev_state_root, allocator);
         state.lastest_block_header.state_root = prev_state_root;
     }
 }
 
 // prepare the state to be pre state of the slot
-pub fn process_slots(state: types.BeamState, slot: types.Slot) void {
+pub fn process_slots(allocator: Allocator, state: *types.BeamState, slot: types.Slot) !void {
     while (state.slot < slot) {
-        process_slot(state);
+        try process_slot(allocator, state);
         // There might not be epoch processing in beam
         // if ((state.slot + 1) % SLOTS_PER_EPOCH == 0) {
         //     process_epoch(state);
@@ -38,26 +42,41 @@ pub fn process_slots(state: types.BeamState, slot: types.Slot) void {
     }
 }
 
-fn process_block_header(state: types.BeamState, block: types.BeamBlock) !void {
+fn process_block_header(allocator: Allocator, state: *types.BeamState, block: types.BeamBlock) !void {
     // very basic process block header
     if (state.slot != block.slot) {
         return StateTransitionError.InvalidPreState;
     }
 
-    const headHash = ssz.tree_root_hash(state.lastest_block_header);
-    if (!std.mem.eql(headHash, block.message.parent_root)) {
+    var head_root: [32]u8 = undefined;
+    try ssz.hashTreeRoot(types.BeamBlockHeader, state.lastest_block_header, &head_root, allocator);
+    if (!std.mem.eql(u8, &head_root, &block.parent_root)) {
         return StateTransitionError.InvalidParentRoot;
     }
 
-    state.lastest_block_header = utils.blockToLatestBlockHeader(block.message);
+    state.lastest_block_header = try utils.blockToLatestBlockHeader(allocator, block);
 }
 
-pub fn apply_transition(state: types.BeamState, block: types.SignedBeamBlock) !void {
-    // prepare the pre state for this block slot
-    process_slots(state, block.slot);
-
+pub fn process_block(allocator: Allocator, state: *types.BeamState, block: types.BeamBlock) !void {
     // start block processing
-    try process_block_header(state, block);
+    try process_block_header(allocator, state, block);
+}
+
+// fill this up when we have signature scheme
+pub fn verify_signatures(signedBlock: types.SignedBeamBlock) !void {
+    _ = signedBlock;
+}
+
+pub fn apply_transition(allocator: Allocator, state: *types.BeamState, signedBlock: types.SignedBeamBlock) !void {
+    // verify the proposer and attestation signatures on signed block
+    try verify_signatures(signedBlock);
+
+    // prepare the pre state for this block slot
+    const block = signedBlock.message;
+    try process_slots(allocator, state, block.slot);
+
+    // process the block
+    try process_block(allocator, state, block);
 }
 
 const StateTransitionError = error{
@@ -75,11 +94,14 @@ test "ssz import" {
     try std.testing.expect(std.mem.eql(u8, list.items, serialized_data[0..]));
 }
 
-test "genesis block util" {
+test "genesis and state transition" {
+    // 1. setup genesis config
     const test_config = types.ChainConfig{
         .genesis_time = 1234,
     };
-    const test_genesis = try utils.genGenesisState(std.testing.allocator, test_config);
+
+    // 2. generate genesis state
+    var test_genesis = try utils.genGenesisState(std.testing.allocator, test_config);
 
     var test_genesis_root: [32]u8 = undefined;
     try ssz.hashTreeRoot(types.BeamState, test_genesis, &test_genesis_root, std.testing.allocator);
@@ -88,5 +110,39 @@ test "genesis block util" {
     _ = try std.fmt.hexToBytes(expected_root[0..], "0d2ea8d3f6846e408db07fd6970d131533a7062ed973c8c4d4d64de8adad1bff");
 
     try std.testing.expect(std.mem.eql(u8, &test_genesis_root, &expected_root));
-    std.debug.print("test_genesis: {any} {s}", .{ test_genesis, std.fmt.fmtSliceHexLower(&test_genesis_root) });
+    std.debug.print("test_genesis: {any} {s}\n", .{ test_genesis, std.fmt.fmtSliceHexLower(&test_genesis_root) });
+
+    // 3. generate genesis block
+    const test_genesis_block = try utils.genGenesisBlock(std.testing.allocator, test_genesis);
+    var test_genesis_block_root: [32]u8 = undefined;
+    try ssz.hashTreeRoot(types.BeamBlock, test_genesis_block, &test_genesis_block_root, std.testing.allocator);
+
+    var expected_genesis_block_root: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(expected_genesis_block_root[0..], "5d476554c248a6f59082aabf1bf9cde041e7f9e0cf43990a22f42246dcfc1007");
+
+    try std.testing.expect(std.mem.eql(u8, &test_genesis_root, &test_genesis_block.state_root));
+    try std.testing.expect(std.mem.eql(u8, &test_genesis_block_root, &expected_genesis_block_root));
+    std.debug.print("test_genesis: {any} {s} {s}\n", .{ test_genesis_block, std.fmt.fmtSliceHexLower(&test_genesis_block.state_root), std.fmt.fmtSliceHexLower(&test_genesis_block_root) });
+
+    // 4. assemble a new block with zero state root
+    var block1_state_root: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(block1_state_root[0..], utils.ZERO_HASH_HEX);
+
+    var block1 = types.BeamBlock{
+        .slot = 1,
+        .proposer_index = 1,
+        .parent_root = test_genesis_block_root,
+        .state_root = block1_state_root,
+        .body = types.BeamBlockBody{},
+    };
+
+    // 5. clone genesis and get the prestate for the block
+    // TODO clone
+    try process_slots(std.testing.allocator, &test_genesis, block1.slot);
+
+    // 6. apply the block to the genesis
+    try process_block(std.testing.allocator, &test_genesis, block1);
+    try ssz.hashTreeRoot(types.BeamState, test_genesis, &block1_state_root, std.testing.allocator);
+    block1.state_root = block1_state_root;
+    std.debug.print("post test_genesis: {any}, block1: {any} {s}\n", .{ test_genesis, block1, std.fmt.fmtSliceHexLower(&block1_state_root) });
 }
