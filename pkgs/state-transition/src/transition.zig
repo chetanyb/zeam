@@ -79,6 +79,14 @@ test "genesis block util" {
     const test_config = types.ChainConfig{
         .genesis_time = 1234,
     };
-    const test_genesis = utils.genGenesisState(std.testing.allocator, test_config);
-    std.debug.print("test_genesis: {any}", .{test_genesis});
+    const test_genesis = try utils.genGenesisState(std.testing.allocator, test_config);
+
+    var test_genesis_root: [32]u8 = undefined;
+    try ssz.hashTreeRoot(types.BeamState, test_genesis, &test_genesis_root, std.testing.allocator);
+
+    var expected_root: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(expected_root[0..], "0d2ea8d3f6846e408db07fd6970d131533a7062ed973c8c4d4d64de8adad1bff");
+
+    try std.testing.expect(std.mem.eql(u8, &test_genesis_root, &expected_root));
+    std.debug.print("test_genesis: {any} {s}", .{ test_genesis, std.fmt.fmtSliceHexLower(&test_genesis_root) });
 }
