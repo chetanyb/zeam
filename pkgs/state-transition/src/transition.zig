@@ -144,5 +144,12 @@ test "genesis and state transition" {
     try process_block(std.testing.allocator, &test_genesis, block1);
     try ssz.hashTreeRoot(types.BeamState, test_genesis, &block1_state_root, std.testing.allocator);
     block1.state_root = block1_state_root;
-    std.debug.print("post test_genesis: {any}, block1: {any} {s}\n", .{ test_genesis, block1, std.fmt.fmtSliceHexLower(&block1_state_root) });
+    var block1_root: [32]u8 = undefined;
+    try ssz.hashTreeRoot(types.BeamBlock, block1, &block1_root, std.testing.allocator);
+
+    var expected_block1_root: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(expected_block1_root[0..], "5b0c264e75ce2fae8ec3c2e0c1debb81e023e62df737469be61acdb37b7ff9a3");
+    try std.testing.expect(std.mem.eql(u8, &block1_root, &expected_block1_root));
+
+    std.debug.print("post test_genesis: {any}, block1: {any} block1stateroot: {s} block1 root: {s}\n", .{ test_genesis, block1, std.fmt.fmtSliceHexLower(&block1_state_root), std.fmt.fmtSliceHexLower(&block1_root) });
 }
