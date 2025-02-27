@@ -5,9 +5,10 @@ const std = @import("std");
 pub const Bytes32 = [32]u8;
 pub const Slot = u64;
 pub const ValidatorIndex = u64;
-pub const Bytes48 = [:48]u8;
+pub const Bytes48 = [48]u8;
 
-pub const ChainConfig = struct { genesis_time: u64 };
+pub const GenesisConfig = struct { genesis_time: u64 };
+pub const PresetConfig = struct { seconds_per_slot: u64 };
 
 pub const BeamBlockHeader = struct {
     slot: Slot,
@@ -30,6 +31,7 @@ pub const BeamBlock = struct {
 
 pub const SignedBeamBlock = struct {
     message: BeamBlock,
+    // winternitz signature might be of different size depending on num chunks and chunk size
     signature: Bytes48,
 };
 

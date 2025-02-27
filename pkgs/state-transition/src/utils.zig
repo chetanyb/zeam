@@ -7,6 +7,8 @@ const ssz = @import("ssz");
 pub const ZERO_HASH_HEX = "0000000000000000000000000000000000000000000000000000000000000000";
 pub const ZERO_HASH = [_]u8{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
+pub const ZERO_HASH_48HEX = "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+
 pub fn blockToHeader(allocator: Allocator, block: types.BeamBlock) types.BeamBlockHeader {
     var body_root: [32]u8 = undefined;
     try ssz.hashTreeRoot(
@@ -91,7 +93,7 @@ pub fn genGenesisLatestBlock() !types.BeamBlock {
     return genesis_latest_block;
 }
 
-pub fn genGenesisState(allocator: Allocator, config: types.ChainConfig) !types.BeamState {
+pub fn genGenesisState(allocator: Allocator, config: types.GenesisConfig) !types.BeamState {
     const genesis_latest_block = try genGenesisLatestBlock();
     const state = types.BeamState{
         .genesis_time = config.genesis_time,

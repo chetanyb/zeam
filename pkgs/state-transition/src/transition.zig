@@ -77,11 +77,19 @@ pub fn apply_transition(allocator: Allocator, state: *types.BeamState, signedBlo
 
     // process the block
     try process_block(allocator, state, block);
+
+    // verify the post state root
+    var state_root: [32]u8 = undefined;
+    try ssz.hashTreeRoot(types.BeamState, state.*, &state_root, allocator);
+    if (!std.mem.eql(u8, &state_root, &block.state_root)) {
+        return StateTransitionError.InvalidPostState;
+    }
 }
 
 const StateTransitionError = error{
-    InvalidPreState,
     InvalidParentRoot,
+    InvalidPreState,
+    InvalidPostState,
 };
 
 test "ssz import" {
@@ -96,7 +104,7 @@ test "ssz import" {
 
 test "genesis and state transition" {
     // 1. setup genesis config
-    const test_config = types.ChainConfig{
+    const test_config = types.GenesisConfig{
         .genesis_time = 1234,
     };
 
@@ -145,7 +153,11 @@ test "genesis and state transition" {
     try ssz.hashTreeRoot(types.BeamState, test_genesis, &block1_state_root, std.testing.allocator);
     block1.state_root = block1_state_root;
 
-    // 7. calc final block1 root which could be used in signing and creating the signed beam block
+    var expected_block1_state_root: [32]u8 = undefined;
+    _ = try std.fmt.hexToBytes(expected_block1_state_root[0..], "f77aaa703c400ccaffa8e674316713b044fcc3d94ec5764b00ce7edc138e7c95");
+    try std.testing.expect(std.mem.eql(u8, &expected_block1_state_root, &block1_state_root));
+
+    // 7. (optional for current test) calc final block1 root which could be used in signing the beam block
     var block1_root: [32]u8 = undefined;
     try ssz.hashTreeRoot(types.BeamBlock, block1, &block1_root, std.testing.allocator);
 
@@ -154,4 +166,25 @@ test "genesis and state transition" {
     try std.testing.expect(std.mem.eql(u8, &block1_root, &expected_block1_root));
 
     std.debug.print("post test_genesis: {any}, block1: {any} block1stateroot: {s} block1 root: {s}\n", .{ test_genesis, block1, std.fmt.fmtSliceHexLower(&block1_state_root), std.fmt.fmtSliceHexLower(&block1_root) });
+
+    // 8. form a signed beam block
+    // TODO: real signatures once integrated
+    var signature: [48]u8 = undefined;
+    _ = try std.fmt.hexToBytes(signature[0..], utils.ZERO_HASH_48HEX);
+
+    const signed_block1 = types.SignedBeamBlock{
+        .message = block1,
+        .signature = signature,
+    };
+
+    // 9. run state transition
+    // TODO: the previous process block should have been run on cloned state so we have the original pre
+    // state here to run the state transition. for now regen same genesis state
+    var state = try utils.genGenesisState(std.testing.allocator, test_config);
+    try apply_transition(std.testing.allocator, &state, signed_block1);
+    var post_state_root: [32]u8 = undefined;
+    try ssz.hashTreeRoot(types.BeamState, state, &post_state_root, std.testing.allocator);
+
+    try std.testing.expect(std.mem.eql(u8, &post_state_root, &expected_block1_state_root));
+    std.debug.print("post state transition: {any}, signed_block1: {any} post_state_root: {s}\n", .{ test_genesis, signed_block1, std.fmt.fmtSliceHexLower(&post_state_root) });
 }
