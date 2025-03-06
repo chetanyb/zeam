@@ -1,14 +1,13 @@
-const ssz = @import("ssz");
 const std = @import("std");
+
+const ssz = @import("ssz");
+const params = @import("params");
 
 // just dummy type right now to test imports
 pub const Bytes32 = [32]u8;
 pub const Slot = u64;
 pub const ValidatorIndex = u64;
 pub const Bytes48 = [48]u8;
-
-pub const GenesisConfig = struct { genesis_time: u64 };
-pub const PresetConfig = struct { seconds_per_slot: u64 };
 
 pub const BeamBlockHeader = struct {
     slot: Slot,
@@ -52,6 +51,9 @@ pub const BeamSTFProof = struct {
     zk_vm: ZkVm,
     proof: []u8,
 };
+
+pub const GenesisSpec = struct { genesis_time: u64 };
+pub const ChainSpec = struct { preset: params.Preset, name: [100:0]u8 };
 
 test "ssz import" {
     const data: u16 = 0x5566;
