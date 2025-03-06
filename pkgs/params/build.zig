@@ -4,23 +4,23 @@ pub fn build(b: *Builder) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const mod = b.addModule("zeam-constants", Builder.Module.CreateOptions{
-        .root_source_file = b.path("src/constant.zig"),
+    const mod = b.addModule("zeam-params", Builder.Module.CreateOptions{
+        .root_source_file = b.path("src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
     _ = mod;
 
     const lib = b.addStaticLibrary(.{
-        .name = "zeam-constants",
-        .root_source_file = .{ .cwd_relative = "src/constant.zig" },
+        .name = "zeam-params",
+        .root_source_file = .{ .cwd_relative = "src/lib.zig" },
         .optimize = optimize,
         .target = target,
     });
     b.installArtifact(lib);
 
     const tests = b.addTest(.{
-        .root_source_file = .{ .cwd_relative = "src/constant.zig" },
+        .root_source_file = .{ .cwd_relative = "src/lib.zig" },
         .optimize = optimize,
         .target = target,
     });
