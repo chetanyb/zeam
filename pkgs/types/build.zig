@@ -9,7 +9,7 @@ pub fn build(b: *Builder) void {
         .optimize = optimize,
     }).module("ssz.zig");
 
-    // add zeam-types
+    // add zeam-params
     const zeam_params = b.dependency("zeam-params", .{
         .target = target,
         .optimize = optimize,

@@ -93,10 +93,10 @@ pub fn genGenesisLatestBlock() !types.BeamBlock {
     return genesis_latest_block;
 }
 
-pub fn genGenesisState(allocator: Allocator, config: types.GenesisConfig) !types.BeamState {
+pub fn genGenesisState(allocator: Allocator, genesis: types.GenesisSpec) !types.BeamState {
     const genesis_latest_block = try genGenesisLatestBlock();
     const state = types.BeamState{
-        .genesis_time = config.genesis_time,
+        .genesis_time = genesis.genesis_time,
         .slot = 0,
         .lastest_block_header = try blockToLatestBlockHeader(allocator, genesis_latest_block),
     };

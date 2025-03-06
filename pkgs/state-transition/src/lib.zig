@@ -104,7 +104,7 @@ test "ssz import" {
 
 test "genesis and state transition" {
     // 1. setup genesis config
-    const test_config = types.GenesisConfig{
+    const test_config = types.GenesisSpec{
         .genesis_time = 1234,
     };
 
