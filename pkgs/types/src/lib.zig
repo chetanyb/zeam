@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const ssz = @import("ssz");
-const params = @import("params");
+const params = @import("zeam-params");
 
 // just dummy type right now to test imports
 pub const Bytes32 = [32]u8;
@@ -53,7 +53,7 @@ pub const BeamSTFProof = struct {
 };
 
 pub const GenesisSpec = struct { genesis_time: u64 };
-pub const ChainSpec = struct { preset: params.Preset, name: [100:0]u8 };
+pub const ChainSpec = struct { preset: params.Preset, name: []u8 };
 
 test "ssz import" {
     const data: u16 = 0x5566;
