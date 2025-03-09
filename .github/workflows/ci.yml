@@ -16,6 +16,19 @@ jobs:
     - name: Lint
       run: zig fmt --check *.zig
 
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Set up Zig
+      uses: korandoru/setup-zig@v1
+      with:
+        zig-version: 0.14.0
+
+    - name: build
+      run: zig build
+
   test:
     name: test
     runs-on: ubuntu-latest
