@@ -181,9 +181,25 @@ test "mock chain util" {
 
     var arena_allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_allocator.deinit();
+    const allocator = arena_allocator.allocator();
 
-    const mock_chain = try genMockChain(arena_allocator.allocator(), 3, test_config);
+    const mock_chain = try genMockChain(allocator, 3, test_config);
     try std.testing.expect(mock_chain.blocks.len == 3);
+
+    // starting beam state
+    var beam_state = mock_chain.genesis_state;
+    // block 0 is genesis so we have to apply block 1 onwards
+    for (1..mock_chain.blocks.len) |i| {
+        // this is a signed block
+        const block = mock_chain.blocks[i];
+        try apply_transition(allocator, &beam_state, block);
+    }
+
+    // check the post state root to be equal to block2's stateroot
+    var post_state_root: [32]u8 = undefined;
+    try ssz.hashTreeRoot(types.BeamState, beam_state, &post_state_root, allocator);
+    try std.testing.expect(std.mem.eql(u8, &post_state_root, &mock_chain.blocks[mock_chain.blocks.len - 1].message.state_root));
+    std.debug.print("final post state root: {s}\n", .{std.fmt.fmtSliceHexLower(&post_state_root)});
 }
 
 test "genesis and state transition" {
