@@ -196,6 +196,7 @@ test "mock chain util" {
     }
 
     // check the post state root to be equal to block2's stateroot
+    // this is reduant though because apply_transition already checks this for each block's state root
     var post_state_root: [32]u8 = undefined;
     try ssz.hashTreeRoot(types.BeamState, beam_state, &post_state_root, allocator);
     try std.testing.expect(std.mem.eql(u8, &post_state_root, &mock_chain.blocks[mock_chain.blocks.len - 1].message.state_root));
