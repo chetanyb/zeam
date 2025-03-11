@@ -109,8 +109,17 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
     // figure out a way to clone genesis_state
     var beam_state = try utils.genGenesisState(allocator, genesis_config);
-    var prev_block = try utils.genGenesisBlock(allocator, genesis_config);
+    const genesis_block = try utils.genGenesisBlock(allocator, beam_state);
 
+    var gen_signature: [48]u8 = undefined;
+    _ = try std.fmt.hexToBytes(gen_signature[0..], utils.ZERO_HASH_48HEX);
+    const gen_signed_block = types.SignedBeamBlock{
+        .message = genesis_block,
+        .signature = gen_signature,
+    };
+    try blockList.append(gen_signed_block);
+
+    var prev_block = genesis_block;
     for (1..numBlocks) |slot| {
         var parent_root: [32]u8 = undefined;
         try ssz.hashTreeRoot(types.BeamBlock, prev_block, &parent_root, allocator);
@@ -142,7 +151,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
             .message = block,
             .signature = signature,
         };
-        blockList.appeand(signed_block);
+        try blockList.append(signed_block);
         // now we are ready for next round as the beam_state is not this blocks post state
         prev_block = block;
     }
@@ -162,6 +171,19 @@ test "ssz import" {
 
     try ssz.serialize(u16, data, &list);
     try std.testing.expect(std.mem.eql(u8, list.items, serialized_data[0..]));
+}
+
+test "mock chain util" {
+    // 1. setup genesis config
+    const test_config = types.GenesisSpec{
+        .genesis_time = 1234,
+    };
+
+    var arena_allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_allocator.deinit();
+
+    const mock_chain = try genMockChain(arena_allocator.allocator(), 3, test_config);
+    try std.testing.expect(mock_chain.blocks.len == 3);
 }
 
 test "genesis and state transition" {
