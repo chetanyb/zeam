@@ -9,6 +9,9 @@ pub const Slot = u64;
 pub const ValidatorIndex = u64;
 pub const Bytes48 = [48]u8;
 
+// zig treats string as byte sequence so hex is 64 bytes string
+pub const RootHex = [64]u8;
+
 pub const BeamBlockHeader = struct {
     slot: Slot,
     proposer_index: ValidatorIndex,
