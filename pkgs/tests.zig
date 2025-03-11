@@ -7,5 +7,5 @@ comptime {
     _ = @import("cli/src/main.zig");
     // uncomment after rebase / fixing preset issue
     // _ = @import("types/src/lib.zig");
-    _ = @import("./beam-node/src/node.zig");
+    _ = @import("./node/src/node.zig");
 }

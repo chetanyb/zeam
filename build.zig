@@ -53,10 +53,10 @@ pub fn build(b: *Builder) !void {
     });
 
     // add beam node
-    const zeam_beam_node = b.addModule("zeam-beam-node", .{
+    const zeam_beam_node = b.addModule("zeam-node", .{
         .target = target,
         .optimize = optimize,
-        .root_source_file = b.path("pkgs/beam-node/src/node.zig"),
+        .root_source_file = b.path("pkgs/node/src/node.zig"),
     });
 
     const st_lib = b.addStaticLibrary(.{
@@ -79,7 +79,7 @@ pub fn build(b: *Builder) !void {
     cli_exe.root_module.addImport("zeam-types", zeam_types);
     cli_exe.root_module.addImport("zeam-state-transition", zeam_state_transition);
     cli_exe.root_module.addImport("zeam-state-proving-manager", zeam_state_proving_manager);
-    cli_exe.root_module.addImport("zeam-beam-node", zeam_beam_node);
+    cli_exe.root_module.addImport("zeam-node", zeam_beam_node);
     cli_exe.root_module.addImport("zeam-params", params);
     b.installArtifact(cli_exe);
 
