@@ -11,7 +11,6 @@ const zkvm_targets: []const zkvmTarget = &.{
     .{ .name = "ceno", .set_pie = false },
 };
 
-// TODO build test monorepo
 pub fn build(b: *Builder) !void {
     try build_zkvm_targets(b);
 
