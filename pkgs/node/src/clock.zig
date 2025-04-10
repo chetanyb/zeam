@@ -33,7 +33,15 @@ pub const Clock = struct {
         const current_slot = @divFloor(@as(isize, @intCast(std.time.milliTimestamp())) + CLOCK_DISPARITY_MS - genesis_time_ms, SECONDS_PER_SLOT_MS);
         const current_slot_time_ms = genesis_time_ms + current_slot * SECONDS_PER_SLOT_MS;
 
-        return Self{ .genesis_time_ms = genesis_time_ms, .current_slot_time_ms = current_slot_time_ms, .current_slot = current_slot, .events = events, .timer = timer, .c = c, .on_slot_cbs = std.ArrayList(*const fn (ud: ?*anyopaque, slot: isize) void).init(allocator) };
+        return Self{
+            .genesis_time_ms = genesis_time_ms,
+            .current_slot_time_ms = current_slot_time_ms,
+            .current_slot = current_slot,
+            .events = events,
+            .timer = timer,
+            .c = c,
+            .on_slot_cbs = std.ArrayList(*const fn (ud: ?*anyopaque, slot: isize) void).init(allocator),
+        };
     }
 
     pub fn tickSlot(self: *Self) void {
