@@ -205,7 +205,7 @@ fn build_zkvm_targets(b: *Builder, main_exe: *Builder.Step) !void {
 
         // target has to be riscv5 runtime provable/verifiable on zkVMs
         var exec_name: [256]u8 = undefined;
-        const exe = b.addExecutable(.{
+        var exe = b.addExecutable(.{
             .name = try std.fmt.bufPrint(&exec_name, "zeam-stf-{s}", .{zkvm_target.name}),
             .root_source_file = b.path("pkgs/state-transition-runtime/src/main.zig"),
             .optimize = optimize,
@@ -222,7 +222,6 @@ fn build_zkvm_targets(b: *Builder, main_exe: *Builder.Step) !void {
             exe.pie = true;
         }
         exe.setLinkerScript(b.path(b.fmt("pkgs/state-transition-runtime/src/{s}/{s}.ld", .{ zkvm_target.name, zkvm_target.name })));
-        b.installArtifact(exe);
-        main_exe.dependOn(&exe.step);
+        main_exe.dependOn(&b.addInstallArtifact(exe, .{}).step);
     }
 }
