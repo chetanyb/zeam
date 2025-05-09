@@ -30,3 +30,15 @@ pub const EventLoop = struct {
         try self.loop.run(mode);
     }
 };
+
+const OnSlotCbType = *const fn (ud: *anyopaque, slot: isize) anyerror!void;
+pub const OnSlotCbWrapper = struct {
+    ptr: *anyopaque,
+    onSlotCb: OnSlotCbType,
+    slot: isize = 0,
+    c: xev.Completion = undefined,
+
+    pub fn onSlot(self: OnSlotCbWrapper) !void {
+        return self.onSlotCb(self.ptr, self.slot);
+    }
+};
