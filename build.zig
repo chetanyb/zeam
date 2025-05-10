@@ -96,9 +96,12 @@ pub fn build(b: *Builder) !void {
         .root_source_file = b.path("pkgs/node/src/lib.zig"),
     });
     zeam_beam_node.addImport("xev", xev);
+    zeam_beam_node.addImport("ssz", ssz);
+    zeam_beam_node.addImport("@zeam/utils", zeam_utils);
     zeam_beam_node.addImport("@zeam/params", zeam_params);
     zeam_beam_node.addImport("@zeam/types", zeam_types);
     zeam_beam_node.addImport("@zeam/configs", zeam_configs);
+    zeam_beam_node.addImport("@zeam/state-transition", zeam_state_transition);
 
     // Add the cli executable
     const cli_exe = b.addExecutable(.{
@@ -154,7 +157,10 @@ pub fn build(b: *Builder) !void {
         .target = target,
     });
     tests.root_module.addImport("ssz", ssz);
+    tests.root_module.addImport("@zeam/utils", zeam_utils);
     tests.root_module.addImport("@zeam/types", zeam_types);
+    tests.root_module.addImport("@zeam/configs", zeam_configs);
+    tests.root_module.addImport("@zeam/state-transition", zeam_state_transition);
 
     const run_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run unit tests");
