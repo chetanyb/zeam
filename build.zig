@@ -153,19 +153,62 @@ pub fn build(b: *Builder) !void {
 
     try build_zkvm_targets(b, &cli_exe.step);
 
-    const tests = b.addTest(.{
-        .root_source_file = b.path("pkgs/tests.zig"),
+    const test_step = b.step("test", "Run unit tests");
+
+    const types_tests = b.addTest(.{
+        .root_module = zeam_types,
         .optimize = optimize,
         .target = target,
     });
-    tests.root_module.addImport("ssz", ssz);
-    tests.root_module.addImport("@zeam/params", zeam_params);
-    tests.root_module.addImport("@zeam/types", zeam_types);
-    tests.root_module.addImport("@zeam/configs", zeam_configs);
+    types_tests.root_module.addImport("ssz", ssz);
+    const run_types_test = b.addRunArtifact(types_tests);
+    test_step.dependOn(&run_types_test.step);
 
-    const run_tests = b.addRunArtifact(tests);
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_tests.step);
+    const transition_tests = b.addTest(.{
+        .root_module = zeam_state_transition,
+        .optimize = optimize,
+        .target = target,
+    });
+    // TODO(gballet) typing modules each time is quite tedious, hopefully
+    // this will no longer be necessary in later versions of zig.
+    transition_tests.root_module.addImport("@zeam/types", zeam_types);
+    transition_tests.root_module.addImport("@zeam/params", zeam_params);
+    transition_tests.root_module.addImport("ssz", ssz);
+    const run_transition_test = b.addRunArtifact(transition_tests);
+    test_step.dependOn(&run_transition_test.step);
+
+    const manager_tests = b.addTest(.{
+        .root_module = zeam_state_proving_manager,
+        .optimize = optimize,
+        .target = target,
+    });
+    manager_tests.root_module.addImport("@zeam/types", zeam_types);
+    const run_manager_test = b.addRunArtifact(manager_tests);
+    test_step.dependOn(&run_manager_test.step);
+
+    const node_tests = b.addTest(.{
+        .root_module = zeam_beam_node,
+        .optimize = optimize,
+        .target = target,
+    });
+    const run_node_test = b.addRunArtifact(node_tests);
+    test_step.dependOn(&run_node_test.step);
+
+    const cli_tests = b.addTest(.{
+        .root_module = cli_exe.root_module,
+        .optimize = optimize,
+        .target = target,
+    });
+    const run_cli_test = b.addRunArtifact(cli_tests);
+    test_step.dependOn(&run_cli_test.step);
+
+    const params_tests = b.addTest(.{
+        .root_module = zeam_params,
+        .optimize = optimize,
+        .target = target,
+    });
+    const run_params_tests = b.addRunArtifact(params_tests);
+    test_step.dependOn(&run_params_tests.step);
 }
 
 fn build_zkvm_targets(b: *Builder, main_exe: *Builder.Step) !void {
