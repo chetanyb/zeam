@@ -12,7 +12,11 @@ pub extern "C" fn powdr_prove(
     result_path: *const u8,
     result_path_len: usize,
 ) {
-    env_logger::init();
+    // This can only be initialized once during the
+    // lifetime of the program. There is unfortunately
+    // no way to check if it has already been initialized
+    // and so we proceed.
+    env_logger::try_init().unwrap_or(());
 
     println!(
         "Running the powdr transition prover, current dir={}",
