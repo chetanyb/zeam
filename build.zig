@@ -12,6 +12,15 @@ const zkvm_targets: []const zkvmTarget = &.{
     .{ .name = "ceno", .set_pie = false },
 };
 
+// Add the glue libs to a compile target
+fn addZkvmGlueLibs(b: *Builder, comp: *Builder.Step.Compile) void {
+    for (zkvm_targets) |zkvm_target| {
+        if (zkvm_target.build_glue) {
+            comp.addObjectFile(b.path(b.fmt("pkgs/state-transition-runtime/src/{s}/host/target/release/libzeam_prover_host_{s}.a", .{ zkvm_target.name, zkvm_target.name })));
+        }
+    }
+}
+
 pub fn build(b: *Builder) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -123,22 +132,8 @@ pub fn build(b: *Builder) !void {
     cli_exe.root_module.addImport("@zeam/state-transition", zeam_state_transition);
     cli_exe.root_module.addImport("@zeam/state-proving-manager", zeam_state_proving_manager);
     cli_exe.root_module.addImport("@zeam/node", zeam_beam_node);
-    for (zkvm_targets) |zkvm_target| {
-        if (zkvm_target.build_glue) {
-            const zkvm_host_cmd = b.addSystemCommand(&.{
-                "cargo",
-                "+nightly",
-                "-C",
-                b.fmt("pkgs/state-transition-runtime/src/{s}/host", .{zkvm_target.name}),
-                "-Z",
-                "unstable-options",
-                "build",
-                "--release",
-            });
-            cli_exe.step.dependOn(&zkvm_host_cmd.step);
-            cli_exe.addObjectFile(b.path(b.fmt("pkgs/state-transition-runtime/src/{s}/host/target/release/libzeam_prover_host_{s}.a", .{ zkvm_target.name, zkvm_target.name })));
-        }
-    }
+
+    addZkvmGlueLibs(b, cli_exe);
     cli_exe.linkLibC(); // for rust static libs to link
     cli_exe.linkSystemLibrary("unwind"); // to be able to display rust backtraces
     b.installArtifact(cli_exe);
@@ -199,6 +194,7 @@ pub fn build(b: *Builder) !void {
         .optimize = optimize,
         .target = target,
     });
+    addZkvmGlueLibs(b, cli_tests);
     const run_cli_test = b.addRunArtifact(cli_tests);
     test_step.dependOn(&run_cli_test.step);
 
@@ -209,6 +205,23 @@ pub fn build(b: *Builder) !void {
     });
     const run_params_tests = b.addRunArtifact(params_tests);
     test_step.dependOn(&run_params_tests.step);
+
+    for (zkvm_targets) |zkvm_target| {
+        if (zkvm_target.build_glue) {
+            const zkvm_host_cmd = b.addSystemCommand(&.{
+                "cargo",
+                "+nightly",
+                "-C",
+                b.fmt("pkgs/state-transition-runtime/src/{s}/host", .{zkvm_target.name}),
+                "-Z",
+                "unstable-options",
+                "build",
+                "--release",
+            });
+            cli_exe.step.dependOn(&zkvm_host_cmd.step);
+            cli_tests.step.dependOn(&zkvm_host_cmd.step);
+        }
+    }
 }
 
 fn build_zkvm_targets(b: *Builder, main_exe: *Builder.Step) !void {
