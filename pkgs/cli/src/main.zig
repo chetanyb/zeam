@@ -58,12 +58,12 @@ pub fn main() !void {
         },
         .prove => |provecmd| {
             std.debug.print("distribution dir={s}\n", .{provecmd.dist_dir});
-            const options = stateProvingManager.StateTransitionOpts{
+            const options = stateProvingManager.ZKStateTransitionOpts{
                 // .powdr = .{
                 //     .program_path = "zig-out/bin/zeam-stf-powdr",
                 //     .output_dir = "out",
                 // },
-                .risc0 = .{ .program_path = "zig-out/bin/risc0_runtime.elf" },
+                .zkvm = .{ .risc0 = .{ .program_path = "zig-out/bin/risc0_runtime.elf" } },
             };
 
             // generate a mock chain with 2 blocks including genesis i.e. 1 block on top of genesis
@@ -79,7 +79,7 @@ pub fn main() !void {
                 std.debug.print("\nprestate slot blockslot={d} stateslot={d}\n", .{ block.message.slot, beam_state.slot });
                 const proof = try stateProvingManager.prove_transition(beam_state, block, options, allocator);
                 // transition beam state for the next block
-                try sftFactory.apply_transition(allocator, &beam_state, block);
+                try sftFactory.apply_transition(allocator, &beam_state, block, .{});
 
                 // verify the block
                 try stateProvingManager.verify_transition(proof, [_]u8{0} ** 32, [_]u8{0} ** 32, options);
