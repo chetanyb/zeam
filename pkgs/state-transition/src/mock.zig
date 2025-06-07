@@ -8,6 +8,9 @@ pub const utils = @import("./utils.zig");
 const transition = @import("./transition.zig");
 const params = @import("@zeam/params");
 
+const zeam_utils = @import("@zeam/utils");
+const getLogger = zeam_utils.getLogger;
+
 const MockChainData = struct {
     genesis_config: types.GenesisSpec,
     genesis_state: types.BeamState,
@@ -18,6 +21,7 @@ const MockChainData = struct {
 pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types.GenesisSpec) !MockChainData {
     const genesis_config = from_genesis orelse types.GenesisSpec{
         .genesis_time = 1234,
+        .num_validators = 4,
     };
 
     const genesis_state = try utils.genGenesisState(allocator, genesis_config);
@@ -41,6 +45,12 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
     try blockRootList.append(block_root);
 
     var prev_block = genesis_block;
+
+    // track latest justified and finalized for constructing votes
+    var latest_justified: types.Mini3SFCheckpoint = .{ .root = block_root, .slot = genesis_block.slot };
+    var latest_justified_prev = latest_justified;
+    var latest_finalized = latest_justified;
+
     for (1..numBlocks) |slot| {
         var parent_root: [32]u8 = undefined;
         try ssz.hashTreeRoot(types.BeamBlock, prev_block, &parent_root, allocator);
@@ -48,19 +58,78 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
         var state_root: [32]u8 = undefined;
         _ = try std.fmt.hexToBytes(state_root[0..], utils.ZERO_HASH_HEX);
         const timestamp = genesis_config.genesis_time + slot * params.SECONDS_PER_SLOT;
+        var votes = std.ArrayList(types.Mini3SFVote).init(allocator);
+        // 4 slot moving scenario can be applied over and over with finalization in 0
+        switch (slot % 4) {
+            // no votes on the first block of this
+            1 => {},
+            2 => {
+                const slotVotes = [_]types.Mini3SFVote{
+                    // val 0
+                    .{ .validator_id = 0, .slot = slot - 1, .head = .{ .root = parent_root, .slot = slot - 1 }, .target = .{ .root = parent_root, .slot = slot - 1 }, .source = latest_justified },
+                    // skip val1
+                    // val2
+                    .{ .validator_id = 2, .slot = slot - 1, .head = .{ .root = parent_root, .slot = slot - 1 }, .target = .{ .root = parent_root, .slot = slot - 1 }, .source = latest_justified },
+                    // val3
+                    .{ .validator_id = 3, .slot = slot - 1, .head = .{ .root = parent_root, .slot = slot - 1 }, .target = .{ .root = parent_root, .slot = slot - 1 }, .source = latest_justified },
+                };
+                for (slotVotes) |slotVote| {
+                    try votes.append(slotVote);
+                }
+                // post these votes last_justified would be updated
+                latest_justified_prev = latest_justified;
+                latest_justified = .{ .root = parent_root, .slot = slot - 1 };
+            },
+            3 => {
+                const slotVotes = [_]types.Mini3SFVote{
+                    // skip val0
+                    // val 1
+                    .{ .validator_id = 1, .slot = slot - 1, .head = .{ .root = parent_root, .slot = slot - 1 }, .target = .{ .root = parent_root, .slot = slot - 1 }, .source = latest_justified },
+                    // val2
+                    .{ .validator_id = 2, .slot = slot - 1, .head = .{ .root = parent_root, .slot = slot - 1 }, .target = .{ .root = parent_root, .slot = slot - 1 }, .source = latest_justified },
+                    // val3
+                    .{ .validator_id = 3, .slot = slot - 1, .head = .{ .root = parent_root, .slot = slot - 1 }, .target = .{ .root = parent_root, .slot = slot - 1 }, .source = latest_justified },
+                };
+                for (slotVotes) |slotVote| {
+                    try votes.append(slotVote);
+                }
+                // post these votes last justified and finalized would be updated
+                latest_finalized = latest_justified_prev;
+                latest_justified_prev = latest_justified;
+                latest_justified = .{ .root = parent_root, .slot = slot - 1 };
+            },
+            0 => {
+                const slotVotes = [_]types.Mini3SFVote{
+                    // val 0
+                    .{ .validator_id = 0, .slot = slot - 1, .head = .{ .root = parent_root, .slot = slot - 1 }, .target = .{ .root = parent_root, .slot = slot - 1 }, .source = latest_justified },
+                    // skip val1
+                    // skip val2
+                    // skip val3
+                };
+                for (slotVotes) |slotVote| {
+                    try votes.append(slotVote);
+                }
+            },
+            else => unreachable,
+        }
 
         var block = types.BeamBlock{
             .slot = slot,
             .proposer_index = 1,
             .parent_root = parent_root,
             .state_root = state_root,
-            .body = types.BeamBlockBody{ .execution_payload_header = .{ .timestamp = timestamp } },
+            .body = types.BeamBlockBody{
+                .execution_payload_header = .{ .timestamp = timestamp },
+                .votes = try votes.toOwnedSlice(),
+            },
         };
 
         // prepare pre state to process block for that slot, may be rename prepare_pre_state
         try transition.process_slots(allocator, &beam_state, block.slot);
         // process block and modify the pre state to post state
-        try transition.process_block(allocator, &beam_state, block);
+        var logger = getLogger();
+        logger.setActiveLevel(.info);
+        try transition.process_block(allocator, &beam_state, block, &logger);
 
         // extract the post state root
         try ssz.hashTreeRoot(types.BeamState, beam_state, &state_root, allocator);

@@ -3,6 +3,7 @@ const ssz = @import("ssz");
 const types = @import("@zeam/types");
 const state_transition = @import("@zeam/state-transition");
 const utils = @import("@zeam/utils");
+const getLogger = utils.getLogger;
 
 const Allocator = std.mem.Allocator;
 
@@ -42,6 +43,14 @@ pub fn prove_transition(state: types.BeamState, block: types.SignedBeamBlock, op
     defer serialized.deinit();
     try ssz.serialize(types.BeamSTFProverInput, prover_input, &serialized);
 
+    var logger = getLogger();
+    logger.setActiveLevel(opts.activeLogLevel);
+    logger.debug("prove transition ----------- serialized({d})=\n{any}\n", .{ serialized.items.len, serialized.items });
+
+    var prover_input_deserialized: types.BeamSTFProverInput = undefined;
+    try ssz.deserialize(types.BeamSTFProverInput, serialized.items[0..], &prover_input_deserialized, allocator);
+    logger.debug("should deserialize to={any}", .{prover_input_deserialized.state});
+
     // allocate a megabyte of data so that we have enough space for the proof.
     // XXX not deallocated yet
     var output = try allocator.alloc(u8, 1024 * 1024);
@@ -50,10 +59,10 @@ pub fn prove_transition(state: types.BeamState, block: types.SignedBeamBlock, op
         .risc0 => |risc0cfg| risc0_prove(serialized.items.ptr, serialized.items.len, risc0cfg.program_path.ptr, risc0cfg.program_path.len, output.ptr, output.len),
         // else => @panic("prover isn't enabled"),
     };
-    std.debug.print("proof len={}\n", .{output_len});
     const proof = types.BeamSTFProof{
         .proof = output[0..output_len],
     };
+    logger.debug("proof len={}\n", .{output_len});
 
     return proof;
 }
