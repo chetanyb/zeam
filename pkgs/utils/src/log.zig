@@ -22,7 +22,7 @@ pub fn log(comptime scope: @Type(.enum_literal), activeLevel: std.log.Level, com
         // TODO don't throw error because it somehow messes with creation of  noopLogger as noopLog
         // doesn't throw and somehow it can't seem to infer error types as they might not be same
         // across all log fns, figure out in a later PR
-        const print_str = std.fmt.bufPrint(buf[0..], prefix ++ fmt ++ "\n", args) catch "error formatting log";
+        const print_str = std.fmt.bufPrint(buf[0..], prefix ++ fmt ++ "\n", args) catch @panic("error formatting log\n");
         io.print_str(print_str);
     } else {
         std.debug.lockStdErr();
