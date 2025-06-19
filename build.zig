@@ -6,12 +6,14 @@ const zkvmTarget = struct {
     name: []const u8,
     set_pie: bool = false,
     build_glue: bool = false,
+    triplet: []const u8,
+    cpu_features: []const u8,
 };
 
 const zkvm_targets: []const zkvmTarget = &.{
-    .{ .name = "powdr", .set_pie = true, .build_glue = true },
+    .{ .name = "powdr", .set_pie = true, .build_glue = true, .triplet = "riscv32-freestanding-none", .cpu_features = "generic_rv32" },
     // .{ .name = "ceno", .set_pie = false },
-    .{ .name = "risc0", .build_glue = true },
+    .{ .name = "risc0", .build_glue = true, .triplet = "riscv32-freestanding-none", .cpu_features = "generic_rv32" },
 };
 
 // Add the glue libs to a compile target
@@ -231,32 +233,33 @@ pub fn build(b: *Builder) !void {
 }
 
 fn build_zkvm_targets(b: *Builder, main_exe: *Builder.Step, host_target: std.Build.ResolvedTarget) !void {
-    const target_query = try std.Build.parseTargetQuery(.{ .arch_os_abi = "riscv32-freestanding-none", .cpu_features = "generic_rv32" });
-    const target = b.resolveTargetQuery(target_query);
     const optimize = .ReleaseFast;
 
-    // add ssz
-    const ssz = b.dependency("ssz", .{
-        .target = target,
-        .optimize = optimize,
-    }).module("ssz.zig");
-
-    // add zeam-params
-    const zeam_params = b.addModule("@zeam/params", .{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("pkgs/params/src/lib.zig"),
-    });
-
-    // add zeam-types
-    const zeam_types = b.addModule("@zeam/types", .{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("pkgs/types/src/lib.zig"),
-    });
-    zeam_types.addImport("@zeam/params", zeam_params);
-
     for (zkvm_targets) |zkvm_target| {
+        const target_query = try std.Build.parseTargetQuery(.{ .arch_os_abi = zkvm_target.triplet, .cpu_features = zkvm_target.cpu_features });
+        const target = b.resolveTargetQuery(target_query);
+
+        // add ssz
+        const ssz = b.dependency("ssz", .{
+            .target = target,
+            .optimize = optimize,
+        }).module("ssz.zig");
+
+        // add zeam-params
+        const zeam_params = b.addModule("@zeam/params", .{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("pkgs/params/src/lib.zig"),
+        });
+
+        // add zeam-types
+        const zeam_types = b.addModule("@zeam/types", .{
+            .target = target,
+            .optimize = optimize,
+            .root_source_file = b.path("pkgs/types/src/lib.zig"),
+        });
+        zeam_types.addImport("@zeam/params", zeam_params);
+
         // add zeam-params
         const zeam_utils = b.addModule("@zeam/utils", .{
             .target = target,
