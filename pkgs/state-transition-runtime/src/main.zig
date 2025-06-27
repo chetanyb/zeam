@@ -13,7 +13,7 @@ var logger = zeam_utils.getLogger();
 // different allocated space.
 var fixed_mem = [_]u8{0} ** (128 * 1024 * 1024);
 
-// implements risv5 runtime that runs in zkvm on provided inputs and witnesses to execute
+// implements riscv5 runtime that runs in zkvm on provided inputs and witnesses to execute
 // and prove the state transition as imported from `pkgs/state-transition`
 export fn main() noreturn {
     zkvm.io.print_str("running block transition function\n");

@@ -79,15 +79,15 @@ functional and testable as well as add unit, end to end as well as E2E tests run
  ```
 
  - Implements/verifies the basic state transistion in zig
- - Imported and used by the `risv5` runtime binary whose execution ZK-VMs will prove
+ - Imported and used by the `riscv5` runtime binary whose execution ZK-VMs will prove
 
 2. `pkgs/state-transition-runtime`
  ```zig
- // implements risv5 runtime that runs in zkvm on provided inputs and witnesses to execute
+ // implements riscv5 runtime that runs in zkvm on provided inputs and witnesses to execute
  // and prove the state transition as imported from `pkgs/state-transition`
  pub fn main() noreturn
  ```
-  - a risv5 binary that imports and execute the state transition implemented in `pkgs/state-transition`
+  - a riscv5 binary that imports and execute the state transition implemented in `pkgs/state-transition`
   - inputs: pre state_root and block_root
   - witnesses: pre state and block ssz serialized
 
@@ -123,7 +123,7 @@ fills the post state root in the block and publish it. Proving the block is an i
 constructor can take up or leave to others to prove and publish in network.
 
 For purposes of Zeam POC the block producer after producing the block fully also invokes the proving manager to produce
-the ZK proofs. Note that the proving manager uses risv5 binary from `pkgs/state-transition-runtime` which itself uses
+the ZK proofs. Note that the proving manager uses riscv5 binary from `pkgs/state-transition-runtime` which itself uses
 the `pkgs/state-transition` to run and proof the the state transition. Similarly for verification.
 
 Infact it would be easy enough to independently verify the state transition just by block root and state root with a
