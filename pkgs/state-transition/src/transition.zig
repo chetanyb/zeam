@@ -248,7 +248,6 @@ pub fn verify_signatures(signedBlock: types.SignedBeamBlock) !void {
 
 // TODO(gballet) check if beam block needs to be a pointer
 pub fn apply_transition(allocator: Allocator, state: *types.BeamState, signedBlock: types.SignedBeamBlock, opts: StateTransitionOpts) !void {
-    // _ = opts;
     var logger = getLogger();
     logger.setActiveLevel(opts.activeLogLevel);
     const block = signedBlock.message;
