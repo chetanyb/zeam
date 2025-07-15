@@ -22,6 +22,7 @@ SECTIONS
   PROVIDE(_global_pointer = .);
   .rodata : { *(.rodata .rodata.*)} >rom AT>rom :rodata
 
+  . = 0xa0020000;
   .data : { *(.data .data.* .sdata .sdata.*) } >ram AT>ram :data
 
   .bss : {
