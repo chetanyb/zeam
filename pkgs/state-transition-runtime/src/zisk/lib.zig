@@ -27,3 +27,9 @@ pub fn halt(_: u32) noreturn {
 }
 
 pub fn free_input(_: std.mem.Allocator) void {}
+
+var fixed_mem = [_]u8{0} ** (128);
+pub fn get_allocator() std.mem.Allocator {
+    var fixed_allocator = std.heap.FixedBufferAllocator.init(fixed_mem[0..]);
+    return fixed_allocator.allocator();
+}

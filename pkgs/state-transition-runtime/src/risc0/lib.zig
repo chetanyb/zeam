@@ -28,3 +28,10 @@ pub fn get_input(allocator: std.mem.Allocator) []const u8 {
 pub fn free_input(allocator: std.mem.Allocator, input: []const u8) void {
     allocator.free(input);
 }
+
+var fixed_mem = [_]u8{0} ** (128 * 1024 * 1024);
+
+pub fn get_allocator() std.mem.Allocator {
+    var fixed_allocator = std.heap.FixedBufferAllocator.init(fixed_mem[0..]);
+    return fixed_allocator.allocator();
+}
