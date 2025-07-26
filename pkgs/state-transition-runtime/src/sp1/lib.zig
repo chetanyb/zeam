@@ -1,3 +1,4 @@
+const std = @import("std");
 pub const io = @import("./io.zig");
 pub const syscalls = @import("./syscalls.zig");
 const syscall_halt = syscalls.HALT;
@@ -19,8 +20,13 @@ pub fn halt(_: u32) noreturn {
     const exit_code = 0; // make it an interface param if that makes sense
 
     asm volatile ("ecall"
+        :
         : [syscall_num] "{t0}" (syscall_halt),
           [exit_code] "{a0}" (exit_code),
     );
     unreachable;
+}
+
+pub fn get_input(_: std.mem.Allocator) []const u8 {
+    @panic("not implemented");
 }
