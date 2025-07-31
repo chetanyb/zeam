@@ -32,11 +32,10 @@ SECTIONS
   } >ram AT>ram :bss
 
   . = ALIGN(8);
-  PROVIDE(_init_stack_top = . + 0x100000); # reserve 1M bytes for the initialization stack
+  PROVIDE(_init_stack_top = ABSOLUTE(. + 0x100000)); # reserve 1M bytes for the initialization stack
 
-  PROVIDE(_kernel_heap_bottom = _init_stack_top);
-  PROVIDE(_kernel_heap_top = ORIGIN(ram) + LENGTH(ram));
-  PROVIDE(_kernel_heap_size = _kernel_heap_top - _kernel_heap_bottom);
+  PROVIDE(_kernel_heap_top = ABSOLUTE(ORIGIN(ram) + LENGTH(ram)));
+  PROVIDE(_kernel_heap_size = _kernel_heap_top - _init_stack_top);
 
   _end = .;
 }

@@ -9,10 +9,6 @@ const zeam_utils = @import("@zeam/utils");
 // by default logger's activeLevel is std.log.default_level
 var logger = zeam_utils.getLogger();
 
-// TODO(gballet) move to zkvm module as each zkvm has a
-// different allocated space.
-var fixed_mem = [_]u8{0} ** (128 * 1024 * 1024);
-
 // implements riscv5 runtime that runs in zkvm on provided inputs and witnesses to execute
 // and prove the state transition as imported from `pkgs/state-transition`
 export fn main() noreturn {
@@ -20,8 +16,7 @@ export fn main() noreturn {
 
     var prover_input: types.BeamSTFProverInput = undefined;
 
-    var fixed_allocator = std.heap.FixedBufferAllocator.init(fixed_mem[0..]);
-    const allocator = fixed_allocator.allocator();
+    const allocator = zkvm.get_allocator();
 
     // Get input from memory and deserialize it
     // TODO(gballet) figure out why printing this string is necessary.

@@ -28,8 +28,18 @@ pub fn halt(_: u32) noreturn {
 
 pub fn free_input(_: std.mem.Allocator) void {}
 
-var fixed_mem = [_]u8{0} ** (128);
+pub extern var _init_stack_top: usize;
+pub extern var _kernel_heap_top: usize;
+
 pub fn get_allocator() std.mem.Allocator {
-    var fixed_allocator = std.heap.FixedBufferAllocator.init(fixed_mem[0..]);
+    const mem_start: [*]u8 = @ptrCast(&_init_stack_top);
+    const mem_end: [*]u8 = @ptrCast(&_kernel_heap_top);
+    // recompute the size here, because in pie mode the _kernel_heap_size symbol
+    // will need to be relocated and that means more work than just subtracting
+    // two pointers.
+    const mem_size: usize = @intFromPtr(mem_end) - @intFromPtr(mem_start);
+    const mem_area: []u8 = mem_start[0..mem_size];
+    asm volatile ("" ::: "memory");
+    var fixed_allocator = std.heap.FixedBufferAllocator.init(mem_area);
     return fixed_allocator.allocator();
 }
