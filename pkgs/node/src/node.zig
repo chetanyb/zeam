@@ -20,28 +20,26 @@ const LevelDB = struct {};
 const NodeOpts = struct {
     config: configs.ChainConfig,
     anchorState: types.BeamState,
+    backend: networks.NetworkInterface,
+    clock: *clockFactory.Clock,
     db: LevelDB,
     validator_ids: ?[]usize = null,
 };
 
 pub const BeamNode = struct {
     allocator: Allocator,
-    clock: clockFactory.Clock,
+    clock: *clockFactory.Clock,
     chain: *chainFactory.BeamChain,
     network: networkFactory.Network,
     validator: ?validators.BeamValidator = null,
 
     const Self = @This();
     pub fn init(allocator: Allocator, opts: NodeOpts) !Self {
-        var mock_network: *networks.Mock = try allocator.create(networks.Mock);
-        mock_network.* = try networks.Mock.init(allocator);
-        const backend = mock_network.getNetworkInterface();
-        std.debug.print("---\n\n mock gossip {any}\n\n", .{backend.gossip});
-
-        const network = networkFactory.Network.init(backend);
         var validator: ?validators.BeamValidator = null;
 
         const chain = try allocator.create(chainFactory.BeamChain);
+        const network = networkFactory.Network.init(opts.backend);
+
         chain.* = try chainFactory.BeamChain.init(allocator, opts.config, opts.anchorState);
         if (opts.validator_ids) |ids| {
             validator = validators.BeamValidator.init(allocator, opts.config, .{ .ids = ids, .chain = chain, .network = network });
@@ -49,14 +47,14 @@ pub const BeamNode = struct {
 
         return Self{
             .allocator = allocator,
-            .clock = try clockFactory.Clock.init(allocator, opts.config.genesis.genesis_time),
+            .clock = opts.clock,
             .chain = chain,
             .network = network,
             .validator = validator,
         };
     }
 
-    pub fn onGossip(ptr: *anyopaque, data: *networks.GossipMessage) anyerror!void {
+    pub fn onGossip(ptr: *anyopaque, data: *const networks.GossipMessage) anyerror!void {
         const self: *Self = @ptrCast(@alignCast(ptr));
 
         try self.chain.onGossip(data);
@@ -90,6 +88,8 @@ pub const BeamNode = struct {
             // _ = try validator.chain.produceBlock(.{ .slot = slot, .proposer_index = slot });
             try validator.onSlot(slot);
         }
+
+        try self.chain.printSlot(slot);
     }
 
     pub fn run(self: *Self) !void {
@@ -99,8 +99,5 @@ pub const BeamNode = struct {
 
         const chainOnSlot = try self.getOnSlotCbWrapper();
         try self.clock.subscribeOnSlot(chainOnSlot);
-
-        // this is a blocking run
-        try self.clock.run();
     }
 };
