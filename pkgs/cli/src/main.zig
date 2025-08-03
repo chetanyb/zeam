@@ -1,5 +1,6 @@
 const std = @import("std");
 const json = std.json;
+const build_options = @import("build_options");
 
 const simargs = @import("simargs");
 
@@ -21,8 +22,10 @@ const sftFactory = @import("@zeam/state-transition");
 const networks = @import("@zeam/network");
 
 const ZeamArgs = struct {
-    genesis: ?u64,
-    num_validators: ?u64,
+    genesis: u64 = 1234,
+    num_validators: u64 = 4,
+    help: bool = false,
+    version: bool = false,
 
     __commands__: union(enum) {
         clock: struct {},
@@ -38,19 +41,35 @@ const ZeamArgs = struct {
                 .dist_dir = "Directory where the zkvm guest programs are found",
             };
         },
+
+        pub const __messages__ = .{
+            .clock = "Run the clock service for slot timing",
+            .beam = "Run a full Beam node",
+            .prove = "Generate and verify ZK proofs for state transitions on a mock chain",
+        };
     },
 
     pub const __messages__ = .{
-        .genesis = "genesis time",
+        .genesis = "Genesis time for the chain",
+        .num_validators = "Number of validators",
+    };
+
+    pub const __shorts__ = .{
+        .help = .h,
+        .version = .v,
     };
 };
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    const opts = try simargs.parse(allocator, ZeamArgs, "", "0.0.0");
-    const genesis = opts.args.genesis orelse 1234;
-    const num_validators = opts.args.num_validators orelse 4;
+    const app_description = "Zeam - Zig implementation of Beam Chain, a ZK-based Ethereum Consensus Protocol";
+    const app_version = build_options.version;
+
+    const opts = try simargs.parse(allocator, ZeamArgs, app_description, app_version);
+    const genesis = opts.args.genesis;
+    const num_validators = opts.args.num_validators;
+
     std.debug.print("opts ={any} genesis={d} num_validators={d}\n", .{ opts, genesis, num_validators });
 
     switch (opts.args.__commands__) {
