@@ -28,10 +28,15 @@ const ZeamArgs = struct {
     version: bool = false,
 
     __commands__: union(enum) {
-        clock: struct {},
-        beam: struct {},
+        clock: struct {
+            help: bool = false,
+        },
+        beam: struct {
+            help: bool = false,
+        },
         prove: struct {
             dist_dir: []const u8 = "zig-out/bin",
+            help: bool = false,
 
             pub const __shorts__ = .{
                 .dist_dir = .d,
