@@ -25,6 +25,7 @@ const ZKVMConfig = union(enum) {
     powdr: PowdrConfig,
     risc0: Risc0Config,
 };
+pub const ZKVMs = std.meta.Tag(ZKVMConfig);
 
 const ZKVMOpts = struct { zkvm: ZKVMConfig };
 

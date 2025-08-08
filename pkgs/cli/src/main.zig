@@ -36,10 +36,12 @@ const ZeamArgs = struct {
         },
         prove: struct {
             dist_dir: []const u8 = "zig-out/bin",
+            zkvm: stateProvingManager.ZKVMs = .risc0,
             help: bool = false,
 
             pub const __shorts__ = .{
                 .dist_dir = .d,
+                .zkvm = .z,
             };
 
             pub const __messages__ = .{
@@ -87,11 +89,10 @@ pub fn main() !void {
         .prove => |provecmd| {
             std.debug.print("distribution dir={s}\n", .{provecmd.dist_dir});
             const options = stateProvingManager.ZKStateTransitionOpts{
-                // .powdr = .{
-                //     .program_path = "zig-out/bin/zeam-stf-powdr",
-                //     .output_dir = "out",
-                // },
-                .zkvm = .{ .risc0 = .{ .program_path = "zig-out/bin/risc0_runtime.elf" } },
+                .zkvm = blk: switch (provecmd.zkvm) {
+                    .risc0 => break :blk .{ .risc0 = .{ .program_path = "zig-out/bin/risc0_runtime.elf" } },
+                    .powdr => return error.PowdrIsDeprecated,
+                },
             };
 
             // generate a mock chain with 5 blocks including genesis i.e. 4 blocks on top of genesis
