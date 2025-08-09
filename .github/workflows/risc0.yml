@@ -25,6 +25,12 @@ jobs:
         toolchain: stable
         components: clippy, rustfmt
 
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: pkgs/state-transition-runtime/src/risc0/host
+        key: ${{ hashFiles('**/*') }}
+
     - name: Install risc0
       run: |
         curl -L https://risczero.com/install | bash
