@@ -7,7 +7,72 @@ pub fn halt(status: u32) noreturn {
     sys_halt(&empty_digest, status);
 }
 
-const empty_digest = [_]u32{ 0x5c176f83, 0x53f3c062, 0x42651683, 0x340b8b7e, 0x19d2d1f6, 0xae4d7602, 0xb8c606b4, 0xb075b53d };
+const empty_digest_bytes = blk: {
+    @setEvalBranchQuota(100000000);
+    break :blk tagged_struct(
+        "risc0.Output",
+        &[2][32]u8{
+            hash_bytes(&[0]u8{}), // sha256([])
+            [_]u8{0} ** 32, // emtpy assumption
+        },
+        &[0]u32{}, // no extra data
+    );
+};
+
+const empty_digest: [8]u32 = blk: {
+    @setEvalBranchQuota(100000000);
+    var result: [8]u32 = undefined;
+    const bytes = std.mem.asBytes(&result);
+    // @compileLog("Empty digest:", empty_digest_bytes);
+    @memcpy(bytes, &empty_digest_bytes);
+    break :blk result;
+};
+
+fn hash_bytes(input: []const u8) [32]u8 {
+    var result: [32]u8 = undefined;
+    // Note that this is not using sys_hash, but it's fine for now.
+    // TODO: differentiate between the zkvm and compile-time/client
+    // runtime contexts and use sys_sha_buf in the zkvm context.
+    std.crypto.hash.sha2.Sha256.hash(input, &result, .{});
+    return result;
+}
+
+fn tagged_struct(tag: []const u8, down: []const [32]u8, data: []const u32) [32]u8 {
+    // Calculate the total size needed
+    const tag_digest = hash_bytes(tag);
+    const total_size = 32 + (down.len * 32) + (data.len * 4) + 2;
+
+    var buffer: [4096]u8 = undefined;
+    if (total_size > buffer.len) {
+        @panic("tagged_struct: input too large");
+    }
+
+    var offset: usize = 0;
+
+    // Copy tag digest
+    @memcpy(buffer[offset .. offset + 32], &tag_digest);
+    offset += 32;
+
+    // Copy down hashes
+    for (down) |d| {
+        @memcpy(buffer[offset .. offset + 32], &d);
+        offset += 32;
+    }
+
+    // Copy data as little-endian u32s
+    for (data) |d| {
+        const bytes = std.mem.asBytes(&d);
+        @memcpy(buffer[offset .. offset + 4], bytes);
+        offset += 4;
+    }
+
+    // Add length field
+    std.mem.writeInt(u16, buffer[offset .. offset + 2], @as(u16, @intCast(down.len)), .little);
+    // @compileLog("hashed payload", buffer[0..total_size]);
+
+    return hash_bytes(buffer[0..total_size]);
+}
+
 
 fn sys_halt(out_state: *const [8]u32, status: u32) noreturn {
     asm volatile ("ecall"
