@@ -174,6 +174,7 @@ pub fn build(b: *Builder) !void {
         run_prover.addArgs(&[_][]const u8{"prove"});
     }
     run_prover.addArgs(&[_][]const u8{ "-d", b.fmt("{s}/bin", .{b.install_path}) });
+    run_prover.step.dependOn(&cli_exe.step);
 
     try build_zkvm_targets(b, &cli_exe.step, target);
 
