@@ -165,6 +165,15 @@ pub fn build(b: *Builder) !void {
     cli_exe.addLibraryPath(b.path("zig-out/bin"));
     b.installArtifact(cli_exe);
 
+    try build_zkvm_targets(b, &cli_exe.step, target);
+
+    // build the libp2p glue
+    var libp2p_cmd = build_rust_project(b, "pkgs/network/rustlibp2p-bridge");
+    cli_exe.step.dependOn(&libp2p_cmd.step);
+    var libp2p_install_cmd = b.addInstallBinFile(b.path("pkgs/network/rustlibp2p-bridge/target/release/librustlibp2p_bridge.so"), "librustlibp2p_bridge.so");
+    libp2p_install_cmd.step.dependOn(&libp2p_cmd.step);
+    cli_exe.step.dependOn(&libp2p_install_cmd.step);
+
     const run_prover = b.addRunArtifact(cli_exe);
     const prover_step = b.step("run", "Run cli executable");
     prover_step.dependOn(&run_prover.step);
@@ -174,16 +183,7 @@ pub fn build(b: *Builder) !void {
         run_prover.addArgs(&[_][]const u8{"prove"});
     }
     run_prover.addArgs(&[_][]const u8{ "-d", b.fmt("{s}/bin", .{b.install_path}) });
-    run_prover.step.dependOn(&cli_exe.step);
-
-    try build_zkvm_targets(b, &cli_exe.step, target);
-
-    // build the libp2p glue
-    var libp2p_cmd = build_rust_project(b, "pkgs/network/rustlibp2p-bridge");
-    cli_exe.step.dependOn(&libp2p_cmd.step);
-    var libp2p_install_cmd = b.addInstallBinFile(b.path("pkgs/network/rustlibp2p-bridge/target/release/librustlibp2p_bridge.so"), "librustlibp2p_bridge.so");
-    libp2p_install_cmd.step.dependOn(&libp2p_cmd.step);
-    cli_exe.step.dependOn(&libp2p_install_cmd.step);
+    run_prover.step.dependOn(&libp2p_install_cmd.step);
 
     const test_step = b.step("test", "Run unit tests");
 
