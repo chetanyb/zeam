@@ -40,7 +40,7 @@ export fn handleMsgFromRustBridge(zigHandler: *EthLibp2p, topic_id: u32, message
 }
 
 // TODO: change listen port and connect port both to list of multiaddrs
-pub extern fn createAndRunNetwork(networkId: u32, a: *EthLibp2p, listenPort: i32, connectPort: i32) void;
+pub extern fn create_and_run_network(networkId: u32, a: *EthLibp2p, listenPort: i32, connectPort: i32) void;
 pub extern fn publish_msg_to_rust_bridge(networkId: u32, topic_id: u32, message_ptr: [*]const u8, message_len: usize) void;
 
 pub const EthLibp2pParams = struct {
@@ -68,7 +68,7 @@ pub const EthLibp2p = struct {
     }
 
     pub fn run(self: *Self) !void {
-        self.rustBridgeThread = try Thread.spawn(.{}, createAndRunNetwork, .{ self.params.networkId, self, self.params.port, self.params.peers });
+        self.rustBridgeThread = try Thread.spawn(.{}, create_and_run_network, .{ self.params.networkId, self, self.params.port, self.params.peers });
     }
 
     pub fn publish(ptr: *anyopaque, data: *const interface.GossipMessage) anyerror!void {

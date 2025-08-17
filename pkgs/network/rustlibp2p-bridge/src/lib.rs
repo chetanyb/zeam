@@ -4,24 +4,19 @@ use libp2p::{gossipsub, identify, identity, core, noise, ping, yamux, PeerId, Tr
 use libp2p::swarm::{NetworkBehaviour, SwarmEvent};
 use std::time::Duration;
 use futures::future::Either;
-use std::{error::Error, net::Ipv4Addr,collections::hash_map::DefaultHasher,hash::{Hash, Hasher},};
+use std::{net::Ipv4Addr,collections::hash_map::DefaultHasher,hash::{Hash, Hasher},};
 use futures::StreamExt;
-use slog::{crit, debug, info, o, trace, warn};
-use tokio::{io, io::AsyncBufReadExt, select};
-use std::num::{NonZeroU8, NonZeroUsize};
-use tokio::runtime::{Builder, Runtime};
-use std::ffi::CString;
-use std::os::raw::c_char;
+use tokio::runtime::Builder;
 
 type BoxedTransport = Boxed<(PeerId, StreamMuxerBox)>;
 
 // TODO: protect the access by mutex
-static mut swarm_state: Option<libp2p::swarm::Swarm<Behaviour>> = None;
+static mut SWARM_STATE: Option<libp2p::swarm::Swarm<Behaviour>> = None;
 // a hack to start a second network for self testing purposes
-static mut swarm_state1: Option<libp2p::swarm::Swarm<Behaviour>> = None;
+static mut SWARM_STATE1: Option<libp2p::swarm::Swarm<Behaviour>> = None;
 
 #[no_mangle]
-pub fn createAndRunNetwork(network_id: u32, zig_handler: u64, self_port: i32, connect_port: i32) {
+pub fn create_and_run_network(network_id: u32, zig_handler: u64, self_port: i32, connect_port: i32) {
 
     let rt = Builder::new_current_thread()
         .enable_all()
@@ -37,15 +32,15 @@ pub fn createAndRunNetwork(network_id: u32, zig_handler: u64, self_port: i32, co
 }
 
 #[no_mangle]
-pub fn publish_msg_to_rust_bridge(network_id:u32, topic_id: u32, message_str: *const u8, message_len: usize){
+pub fn publish_msg_to_rust_bridge(network_id:u32, _topic_id: u32, message_str: *const u8, message_len: usize){
         let message_slice = unsafe { std::slice::from_raw_parts(message_str, message_len) };
         println!("rustbridge-{network_id}:: publishing message s={:?}",message_slice);
         let message_data = message_slice.to_vec();
 
         // TODO: get the topic mapping from topic_id
         let topic = gossipsub::IdentTopic::new("block");
-         let swarm = if(network_id < 1) {unsafe {swarm_state.as_mut().unwrap()}} else {unsafe {swarm_state1.as_mut().unwrap()}};
-        // let mut swarm = unsafe {swarm_state.as_mut().unwrap()};
+         let swarm = if network_id < 1 {unsafe {SWARM_STATE.as_mut().unwrap()}} else {unsafe {SWARM_STATE1.as_mut().unwrap()}};
+        // let mut swarm = unsafe {SWARM_STATE.as_mut().unwrap()};
         if let Err(e) = swarm.behaviour_mut().gossipsub
                     .publish(topic.clone(), message_data){
                     println!("Publish error: {e:?}");
@@ -83,7 +78,7 @@ pub async fn start_network(&mut self,self_port: i32, connect_port: i32) {
 
     println!("going for loop match");
 
-    if(connect_port > 0){
+    if connect_port > 0 {
         let connect_string = format!("/ip4/127.0.0.1/tcp/{}", connect_port);
         let addr: Multiaddr = connect_string.parse().unwrap();
 
@@ -107,23 +102,23 @@ pub async fn start_network(&mut self,self_port: i32, connect_port: i32) {
 
     if self.network_id < 1 {
         unsafe{
-        swarm_state = Some(swarm);
+        SWARM_STATE = Some(swarm);
       }
     }else{
         unsafe{
-        swarm_state1 = Some(swarm);
+        SWARM_STATE1 = Some(swarm);
       }
     }
 
     // unsafe{
-    //     swarm_state = Some(swarm);
+    //     SWARM_STATE = Some(swarm);
     //   }
 
 }
 
 pub async fn run_eventloop(&mut self) {
-    let swarm = if self.network_id < 1 {unsafe {swarm_state.as_mut().unwrap()}} else {unsafe {swarm_state1.as_mut().unwrap()}};
-    // let mut swarm = unsafe {swarm_state.as_mut().unwrap()};
+    let swarm = if self.network_id < 1 {unsafe {SWARM_STATE.as_mut().unwrap()}} else {unsafe {SWARM_STATE1.as_mut().unwrap()}};
+    // let mut swarm = unsafe {SWARM_STATE.as_mut().unwrap()};
 
     loop {
             match swarm.select_next_some().await {
