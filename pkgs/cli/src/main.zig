@@ -91,11 +91,14 @@ pub fn main() !void {
         },
         .prove => |provecmd| {
             std.debug.print("distribution dir={s}\n", .{provecmd.dist_dir});
+            const logger = utilsLib.getLogger(null);
+
             const options = stateProvingManager.ZKStateTransitionOpts{
                 .zkvm = blk: switch (provecmd.zkvm) {
                     .risc0 => break :blk .{ .risc0 = .{ .program_path = "zig-out/bin/risc0_runtime.elf" } },
                     .powdr => return error.PowdrIsDeprecated,
                 },
+                .logger = &logger,
             };
 
             // generate a mock chain with 5 blocks including genesis i.e. 4 blocks on top of genesis
@@ -112,7 +115,7 @@ pub fn main() !void {
                 std.debug.print("\nprestate slot blockslot={d} stateslot={d}\n", .{ block.message.slot, beam_state.slot });
                 const proof = try stateProvingManager.prove_transition(beam_state, block, options, allocator);
                 // transition beam state for the next block
-                try sftFactory.apply_transition(allocator, &beam_state, block, .{});
+                try sftFactory.apply_transition(allocator, &beam_state, block, .{ .logger = &logger });
 
                 // verify the block
                 try stateProvingManager.verify_transition(proof, [_]u8{0} ** 32, [_]u8{0} ** 32, options);
@@ -177,6 +180,9 @@ pub fn main() !void {
             var validator_ids_1 = [_]usize{1};
             var validator_ids_2 = [_]usize{2};
 
+            const logger1 = utilsLib.getScopedLogger(.n1, .debug);
+            const logger2 = utilsLib.getScopedLogger(.n2, .debug);
+
             var beam_node_1 = try BeamNode.init(allocator, .{
                 // options
                 .nodeId = 0,
@@ -186,6 +192,7 @@ pub fn main() !void {
                 .clock = clock,
                 .db = .{},
                 .validator_ids = &validator_ids_1,
+                .logger = &logger1,
             });
             var beam_node_2 = try BeamNode.init(allocator, .{
                 // options
@@ -196,14 +203,12 @@ pub fn main() !void {
                 .clock = clock,
                 .db = .{},
                 .validator_ids = &validator_ids_2,
+                .logger = &logger2,
             });
-            std.debug.print("chainoptionsinfo={any}\n", .{beam_node_1.chain});
 
             try beam_node_1.run();
             try beam_node_2.run();
             try clock.run();
-
-            std.debug.print("forkchoice={any}\n", .{beam_node_1.chain.forkChoice});
         },
     }
 }
