@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     libssl-dev \
+    ca-certificate \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Zig 0.14.0
