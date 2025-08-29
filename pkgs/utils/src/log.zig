@@ -1,9 +1,10 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const datetime = @import("datetime");
 
 // having activeLevel non comptime and dynamic allows us env based logging and even a keystroke activated one
 // on a running client, may be can be revised later
-pub fn comptTimeLog(comptime scope: LoggerScope, activeLevel: std.log.Level, comptime level: std.log.Level, comptime fmt: []const u8, args: anytype) void {
+pub fn compTimeLog(comptime scope: LoggerScope, activeLevel: std.log.Level, comptime level: std.log.Level, comptime fmt: []const u8, args: anytype) void {
     if (@intFromEnum(level) > @intFromEnum(activeLevel)) {
         return;
     }
@@ -19,25 +20,30 @@ pub fn comptTimeLog(comptime scope: LoggerScope, activeLevel: std.log.Level, com
     if (builtin.target.os.tag == .freestanding) {
         const io = @import("zkvm").io;
         var buf: [4096]u8 = undefined;
-        // TODO don't throw error because it somehow messes with creation of  noopLogger as noopLog
-        // doesn't throw and somehow it can't seem to infer error types as they might not be same
-        // across all log fns, figure out in a later PR
+        // skip adding timestamp inside zkvm to keep the execution trace static between prover and verifier
         const print_str = std.fmt.bufPrint(buf[0..], prefix ++ fmt ++ "\n", args) catch @panic("error formatting log\n");
         io.print_str(print_str);
     } else {
         std.debug.lockStdErr();
         defer std.debug.unlockStdErr();
         const stderr = std.io.getStdErr().writer();
-        nosuspend stderr.print(prefix ++ fmt ++ "\n", args) catch return;
+
+        var ts_buf: [64]u8 = undefined;
+        const timestamp_str = getFormattedTimestamp(&ts_buf);
+
+        nosuspend stderr.print(
+            "{s} {s}" ++ fmt ++ "\n",
+            .{ timestamp_str, prefix } ++ args,
+        ) catch return;
     }
 }
 
 pub fn log(scope: LoggerScope, activeLevel: std.log.Level, comptime level: std.log.Level, comptime fmt: []const u8, args: anytype) void {
     switch (scope) {
-        .default => return comptTimeLog(.default, activeLevel, level, fmt, args),
-        .n1 => return comptTimeLog(.n1, activeLevel, level, fmt, args),
-        .n2 => return comptTimeLog(.n2, activeLevel, level, fmt, args),
-        .n3 => return comptTimeLog(.n3, activeLevel, level, fmt, args),
+        .default => return compTimeLog(.default, activeLevel, level, fmt, args),
+        .n1 => return compTimeLog(.n1, activeLevel, level, fmt, args),
+        .n2 => return compTimeLog(.n2, activeLevel, level, fmt, args),
+        .n3 => return compTimeLog(.n3, activeLevel, level, fmt, args),
     }
 }
 
@@ -99,4 +105,23 @@ pub fn getScopedLogger(comptime scope: LoggerScope, activeLevel: ?std.log.Level)
 
 pub fn getLogger(activeLevel: ?std.log.Level) ZeamLogger {
     return ZeamLogger.init(std.log.default_log_scope, activeLevel orelse std.log.default_level);
+}
+
+pub fn getFormattedTimestamp(buf: []u8) []const u8 {
+    const ts = std.time.timestamp();
+    // converts millisecond to Datetime
+    const dt = datetime.datetime.Datetime.fromTimestamp(ts * 1000);
+
+    const months: [12][]const u8 = .{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    const month_str = months[dt.date.month - 1];
+    const ms: u16 = @intCast(dt.time.nanosecond / 1_000_000);
+
+    return std.fmt.bufPrint(buf[0..], "{s}-{:0>2} {:0>2}:{:0>2}:{:0>2}.{:0>3}", .{
+        month_str,
+        dt.date.day,
+        dt.time.hour,
+        dt.time.minute,
+        dt.time.second,
+        ms,
+    }) catch return buf[0..0];
 }
