@@ -45,16 +45,16 @@ pub const OnGossipCbHandler = struct {
 
 pub const GossipTopic = enum {
     block,
+    vote,
 };
 pub const GossipMessage = union(GossipTopic) {
     block: types.SignedBeamBlock,
+    vote: types.SignedVote,
 
     const Self = @This();
     // figureout is there a generic way to find active enum
     pub fn getTopic(self: *const Self) GossipTopic {
-        switch (self.*) {
-            .block => return .block,
-        }
+        return std.meta.activeTag(self.*);
     }
 };
 
@@ -107,7 +107,7 @@ pub const GenericGossipHandler = struct {
 
             const publishWrapper = try self.allocator.create(MessagePublishWrapper);
             publishWrapper.* = MessagePublishWrapper{ .handler = handler, .data = data, .networkId = self.networkId };
-            std.debug.print("\n\n\nnetwork-{d}:: schedueling ongossip publishWrapper={any} on loop for topic {any}\n", .{ self.networkId, topic, publishWrapper });
+            std.debug.print("\n\n\nnetwork-{d}:: schedueling ongossip publishWrapper={any} on loop for topic {any}\n\n", .{ self.networkId, topic, publishWrapper });
 
             // TODO: figure out why scheduling on the loop is not working for libp2p separate net instance
             // remove this option once resolved
