@@ -10,6 +10,43 @@ const Multiaddr = @import("multiformats").multiaddr.Multiaddr;
 const interface = @import("./interface.zig");
 const NetworkInterface = interface.NetworkInterface;
 
+/// Writes failed deserialization bytes to disk for debugging purposes
+/// Returns true if the file was successfully created, false otherwise
+/// If timestamp is null, generates a new timestamp automatically
+fn writeFailedBytes(message_bytes: []const u8, message_type: []const u8, allocator: Allocator, timestamp: ?i64) bool {
+    // Create dumps directory if it doesn't exist
+    std.fs.cwd().makeDir("deserialization_dumps") catch |e| switch (e) {
+        error.PathAlreadyExists => {}, // Directory already exists, continue
+        else => {
+            std.debug.print("Failed to create dumps directory: {any}\n", .{e});
+            return false;
+        },
+    };
+
+    // Generate timestamp-based filename
+    const actual_timestamp = timestamp orelse std.time.timestamp();
+    const filename = std.fmt.allocPrint(allocator, "deserialization_dumps/failed_{s}_{d}.bin", .{ message_type, actual_timestamp }) catch |e| {
+        std.debug.print("Failed to allocate filename: {any}\n", .{e});
+        return false;
+    };
+    defer allocator.free(filename);
+
+    // Write bytes to file
+    const file = std.fs.cwd().createFile(filename, .{ .truncate = true }) catch |e| {
+        std.debug.print("Failed to create file {s}: {any}\n", .{ filename, e });
+        return false;
+    };
+    defer file.close();
+
+    file.writeAll(message_bytes) catch |e| {
+        std.debug.print("Failed to write bytes to file {s}: {any}\n", .{ filename, e });
+        return false;
+    };
+
+    std.debug.print("Written {d} bytes to {s} for debugging\n", .{ message_bytes.len, filename });
+    return true;
+}
+
 export fn handleMsgFromRustBridge(zigHandler: *EthLibp2p, topic_id: u32, message_ptr: [*]const u8, message_len: usize) void {
     const topic = switch (topic_id) {
         0 => interface.GossipTopic.block,
@@ -26,6 +63,7 @@ export fn handleMsgFromRustBridge(zigHandler: *EthLibp2p, topic_id: u32, message
             var message_data: types.SignedBeamBlock = undefined;
             ssz.deserialize(types.SignedBeamBlock, message_bytes, &message_data, zigHandler.allocator) catch |e| {
                 std.debug.print("!!!! Error in deserializing the signed block message e={any} !!!!\n", .{e});
+                _ = writeFailedBytes(message_bytes, "block", zigHandler.allocator, null);
                 return;
             };
 
@@ -35,6 +73,7 @@ export fn handleMsgFromRustBridge(zigHandler: *EthLibp2p, topic_id: u32, message
             var message_data: types.SignedVote = undefined;
             ssz.deserialize(types.SignedVote, message_bytes, &message_data, zigHandler.allocator) catch |e| {
                 std.debug.print("!!!! Error in deserializing the signed vote message e={any} !!!!\n", .{e});
+                _ = writeFailedBytes(message_bytes, "vote", zigHandler.allocator, null);
                 return;
             };
             break :votemessage .{ .vote = message_data };
@@ -182,3 +221,73 @@ pub const EthLibp2p = struct {
         return result;
     }
 };
+
+test "writeFailedBytes creates file with correct content" {
+    const testing = std.testing;
+    const allocator = testing.allocator;
+
+    // Ensure directory exists before test (CI-safe)
+    std.fs.cwd().makeDir("deserialization_dumps") catch {};
+
+    // Use a predictable timestamp for deterministic filename
+    const test_timestamp: i64 = 1234567890;
+
+    // Test case 1: Valid data that should succeed
+    const valid_bytes = [_]u8{ 0x00, 0x01, 0x02, 0x03, 0x04, 0x05 };
+    const result1 = writeFailedBytes(&valid_bytes, "test", allocator, test_timestamp);
+    testing.expect(result1 == true) catch {
+        std.debug.print("writeFailedBytes should return true for valid data\n", .{});
+    };
+
+    // Now verify the file was created and contains correct content
+    const expected_filename = "deserialization_dumps/failed_test_1234567890.bin";
+    const file = std.fs.cwd().openFile(expected_filename, .{}) catch |e| {
+        std.debug.print("Failed to open created file: {any}\n", .{e});
+        testing.expect(false) catch {};
+        return;
+    };
+    defer file.close();
+
+    // Read all file contents
+    const file_contents = file.readToEndAlloc(allocator, 1024) catch |e| {
+        std.debug.print("Failed to read file contents: {any}\n", .{e});
+        testing.expect(false) catch {};
+        return;
+    };
+    defer allocator.free(file_contents);
+
+    // Verify the file contains exactly the bytes we provided
+    testing.expectEqualSlices(u8, &valid_bytes, file_contents) catch {
+        std.debug.print("File contents don't match expected bytes. Expected: {any}, Got: {any}\n", .{ &valid_bytes, file_contents });
+    };
+
+    // Test case 2: Empty data that should still succeed
+    const empty_bytes = [_]u8{};
+    const result2 = writeFailedBytes(&empty_bytes, "empty", allocator, test_timestamp);
+    testing.expect(result2 == true) catch {
+        std.debug.print("writeFailedBytes should return true for empty data\n", .{});
+    };
+
+    // Verify empty file was created
+    const empty_filename = "deserialization_dumps/failed_empty_1234567890.bin";
+    const empty_file = std.fs.cwd().openFile(empty_filename, .{}) catch |e| {
+        std.debug.print("Failed to open empty file: {any}\n", .{e});
+        testing.expect(false) catch {};
+        return;
+    };
+    defer empty_file.close();
+
+    const empty_contents = empty_file.readToEndAlloc(allocator, 1024) catch |e| {
+        std.debug.print("Failed to read empty file contents: {any}\n", .{e});
+        testing.expect(false) catch {};
+        return;
+    };
+    defer allocator.free(empty_contents);
+
+    testing.expectEqualSlices(u8, &empty_bytes, empty_contents) catch {
+        std.debug.print("Empty file contents don't match expected bytes. Expected: {any}, Got: {any}\n", .{ &empty_bytes, empty_contents });
+    };
+
+    // Cleanup after we're done with the directory
+    std.fs.cwd().deleteTree("deserialization_dumps") catch {};
+}
