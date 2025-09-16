@@ -44,7 +44,7 @@ pub const StartNodeOptions = struct {
 /// - `nodes.yaml`: Contains the bootnodes in ENR format.
 /// - `validators.yaml`: Contains the validator indices for each node.
 /// The function updates the provided `StartNodeOptions` with the loaded data.
-pub fn loadGenesisConfig(allocator: std.mem.Allocator, path: []const u8, opts: *StartNodeOptions) !void {
+pub fn loadGenesisConfig(allocator: std.mem.Allocator, path: []const u8, override_genesis_time: ?u64, opts: *StartNodeOptions) !void {
     if (std.fs.path.isAbsolute(path)) {
         var dir = try std.fs.openDirAbsolute(path, .{});
         defer dir.close();
@@ -74,7 +74,7 @@ pub fn loadGenesisConfig(allocator: std.mem.Allocator, path: []const u8, opts: *
 
     const bootnodes = try nodesFromYAML(allocator, parsed_bootnodes);
 
-    const genesis_spec = try configs.genesisConfigFromYAML(parsed_config);
+    const genesis_spec = try configs.genesisConfigFromYAML(parsed_config, override_genesis_time);
 
     const validator_indices = try validatorIndicesFromYAML(allocator, opts.node_id, parsed_validators);
 
@@ -230,7 +230,7 @@ pub fn validatorIndicesFromYAML(allocator: std.mem.Allocator, node_id: u32, vali
 test "config yaml parsing" {
     var config1 = try utils_lib.loadFromYAMLFile(std.testing.allocator, "pkgs/cli/src/test/fixtures/config.yaml");
     defer config1.deinit(std.testing.allocator);
-    const genesis_spec = try configs.genesisConfigFromYAML(config1);
+    const genesis_spec = try configs.genesisConfigFromYAML(config1, null);
     try std.testing.expectEqual(9, genesis_spec.num_validators);
     try std.testing.expectEqual(1704085200, genesis_spec.genesis_time);
 
@@ -246,7 +246,10 @@ test "config yaml parsing" {
     var config3 = try utils_lib.loadFromYAMLFile(std.testing.allocator, "pkgs/cli/src/test/fixtures/nodes.yaml");
     defer config3.deinit(std.testing.allocator);
     const nodes = try nodesFromYAML(std.testing.allocator, config3);
-    defer std.testing.allocator.free(nodes);
+    defer {
+        for (nodes) |node| std.testing.allocator.free(node);
+        std.testing.allocator.free(nodes);
+    }
     try std.testing.expectEqual(3, nodes.len);
     try std.testing.expectEqualStrings("enr:-IW4QA0pljjdLfxS_EyUxNAxJSoGCwmOVNJauYWsTiYHyWG5Bky-7yCEktSvu_w-PWUrmzbc8vYL_Mx5pgsAix2OfOMBgmlkgnY0gmlwhKwUAAGEcXVpY4IfkIlzZWNwMjU2azGhA6mw8mfwe-3TpjMMSk7GHe3cURhOn9-ufyAqy40wEyui", nodes[0]);
     try std.testing.expectEqualStrings("enr:-IW4QNx7F6OKXCmx9igmSwOAOdUEiQ9Et73HNygWV1BbuFgkXZLMslJVgpLYmKAzBF-AO0qJYq40TtqvtFkfeh2jzqYBgmlkgnY0gmlwhKwUAAKEcXVpY4IfkIlzZWNwMjU2azGhA2hqUIfSG58w4lGPMiPp9llh1pjFuoSRUuoHmwNdHELw", nodes[1]);
