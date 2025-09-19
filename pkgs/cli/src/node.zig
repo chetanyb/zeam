@@ -18,8 +18,9 @@ const node_lib = @import("@zeam/node");
 const Clock = node_lib.Clock;
 const BeamNode = node_lib.BeamNode;
 const types = @import("@zeam/types");
-const Logger = utils_lib.ZeamLogger;
+const LoggerConfig = utils_lib.ZeamLoggerConfig;
 const NodeCommand = @import("main.zig").NodeCommand;
+const zeam_utils = @import("@zeam/utils");
 
 const prefix = "zeam_";
 
@@ -31,7 +32,7 @@ pub const NodeOptions = struct {
     metrics_enable: bool,
     metrics_port: u16,
     local_priv_key: []const u8,
-    logger: *Logger,
+    logger_config: *LoggerConfig,
 
     pub fn deinit(self: *NodeOptions, allocator: std.mem.Allocator) void {
         for (self.bootnodes) |b| allocator.free(b);
@@ -51,6 +52,7 @@ pub const Node = struct {
     enr: ENR,
     options: *const NodeOptions,
     allocator: std.mem.Allocator,
+    logger: zeam_utils.ModuleLogger,
 
     const Self = @This();
 
@@ -87,7 +89,7 @@ pub const Node = struct {
         self.loop = try xev.Loop.init(.{});
 
         const addresses = try self.constructMultiaddrs();
-        self.network = try networks.EthLibp2p.init(allocator, &self.loop, .{ .networkId = 0, .listen_addresses = addresses.listen_addresses, .connect_peers = addresses.connect_peers, .local_private_key = options.local_priv_key }, options.logger);
+        self.network = try networks.EthLibp2p.init(allocator, &self.loop, .{ .networkId = 0, .listen_addresses = addresses.listen_addresses, .connect_peers = addresses.connect_peers, .local_private_key = options.local_priv_key }, options.logger_config.logger(.network));
         errdefer self.network.deinit();
         self.clock = try Clock.init(allocator, chain_config.genesis.genesis_time, &self.loop);
         errdefer self.clock.deinit(allocator);
@@ -101,8 +103,10 @@ pub const Node = struct {
             .clock = &self.clock,
             .db = .{},
             .validator_ids = options.validator_indices,
-            .logger = options.logger,
+            .logger_config = options.logger_config,
         });
+
+        self.logger = options.logger_config.logger(.node);
     }
 
     pub fn deinit(self: *Self) void {
@@ -135,14 +139,14 @@ pub const Node = struct {
         const quic_port = try self.enr.getQUIC();
 
         // Use logger.info instead of std.debug.print
-        self.options.logger.info("\n{s}", .{ascii_art});
-        self.options.logger.info("════════════════════════════════════════════════════════", .{});
-        self.options.logger.info("  🚀 Zeam Lean Node Started Successfully!", .{});
-        self.options.logger.info("════════════════════════════════════════════════════════", .{});
-        self.options.logger.info("  Node ID: {d}", .{self.options.node_id});
-        self.options.logger.info("  Listening on QUIC port: {?d}", .{quic_port});
-        self.options.logger.info("  ENR: {s}", .{encoded_txt});
-        self.options.logger.info("────────────────────────────────────────────────────────", .{});
+        self.logger.info("\n{s}", .{ascii_art});
+        self.logger.info("════════════════════════════════════════════════════════", .{});
+        self.logger.info("  🚀 Zeam Lean Node Started Successfully!", .{});
+        self.logger.info("════════════════════════════════════════════════════════", .{});
+        self.logger.info("  Node ID: {d}", .{self.options.node_id});
+        self.logger.info("  Listening on QUIC port: {?d}", .{quic_port});
+        self.logger.info("  ENR: {s}", .{encoded_txt});
+        self.logger.info("────────────────────────────────────────────────────────", .{});
 
         try self.clock.run();
     }
