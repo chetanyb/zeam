@@ -147,31 +147,18 @@ fn process_attestations(allocator: Allocator, state: *types.BeamState, attestati
     // work directly with SSZ types
     // historical_block_hashes and justified_slots are already SSZ types in state
 
-    // prep the justifications map
-    var justifications = std.AutoHashMap(types.Root, []u8).init(allocator);
+    var justifications: std.AutoHashMapUnmanaged(types.Root, []u8) = .empty;
     defer {
         var iterator = justifications.iterator();
         while (iterator.next()) |entry| {
             allocator.free(entry.value_ptr.*);
         }
-        justifications.deinit();
     }
+    errdefer justifications.deinit(allocator);
+    try loadJustifications(allocator, &justifications, state, logger);
+
+    // need to cast to usize for slicing ops but does this makes the STF target arch dependent?
     const num_validators: usize = @intCast(state.config.num_validators);
-
-    // Initialize justifications from state
-    for (state.justifications_roots.constSlice(), 0..) |blockRoot, i| {
-        const validator_data = try allocator.alloc(u8, num_validators);
-        // Copy existing justification data if available, otherwise return error
-        for (validator_data, 0..) |*byte, j| {
-            const bit_index = i * num_validators + j;
-            if (bit_index >= state.justifications_validators.len()) {
-                return StateTransitionError.InvalidJustificationIndex;
-            }
-            byte.* = if (state.justifications_validators.get(bit_index)) 1 else 0;
-        }
-        try justifications.put(blockRoot, validator_data);
-    }
-
     for (attestations.constSlice()) |signed_vote| {
         const validator_id: usize = @intCast(signed_vote.validator_id);
         const vote = signed_vote.message;
@@ -229,12 +216,12 @@ fn process_attestations(allocator: Allocator, state: *types.BeamState, attestati
             for (0..targetjustifications.len) |i| {
                 targetjustifications[i] = 0;
             }
-            try justifications.put(vote.target.root, targetjustifications);
+            try justifications.put(allocator, vote.target.root, targetjustifications);
             break :targetjustifications targetjustifications;
         };
 
         target_justifications[validator_id] = 1;
-        try justifications.put(vote.target.root, target_justifications);
+        try justifications.put(allocator, vote.target.root, target_justifications);
         var target_justifications_count: usize = 0;
         for (target_justifications) |justified| {
             if (justified == 1) {
@@ -270,7 +257,46 @@ fn process_attestations(allocator: Allocator, state: *types.BeamState, attestati
         }
     }
 
-    // Update justifications lists
+    try flattenJustifications(allocator, &justifications, state);
+
+    logger.debug("poststate:historical hashes={d} justified slots ={d}\n justifications_roots:{d}\n justifications_validators={d}\n", .{ state.historical_block_hashes.len(), state.justified_slots.len(), state.justifications_roots.len(), state.justifications_validators.len() });
+    logger.debug("poststate: justified={any} finalized={any}", .{ state.latest_justified, state.latest_finalized });
+}
+
+/// Helper function to load justifications from state into a map
+fn loadJustifications(allocator: Allocator, justifications: *std.AutoHashMapUnmanaged(types.Root, []u8), state: *types.BeamState, logger: zeam_utils.ModuleLogger) !void {
+    // need to cast to usize for slicing ops but does this makes the STF target arch dependent?
+    const num_validators: usize = @intCast(state.config.num_validators);
+    // Initialize justifications from state
+    for (state.justifications_roots.constSlice(), 0..) |blockRoot, i| {
+        const validator_data = try allocator.alloc(u8, num_validators);
+        // Copy existing justification data if available, otherwise return error
+        for (validator_data, 0..) |*byte, j| {
+            const bit_index = i * num_validators + j;
+            if (bit_index >= state.justifications_validators.len()) {
+                logger.err("Invalid bit_index={d} parsing justification roots={d} justification entries={d} num_validators={d} access  range (i={d}): {d}..{d} err={any}", .{
+                    bit_index,
+                    state.justifications_roots.len(),
+                    state.justifications_validators.len(),
+                    num_validators,
+                    bit_index,
+                    i,
+                    i * num_validators,
+                    (i + 1) * num_validators,
+                });
+                return StateTransitionError.InvalidJustificationIndex;
+            }
+            byte.* = if (state.justifications_validators.get(bit_index)) 1 else 0;
+        }
+        try justifications.put(allocator, blockRoot, validator_data);
+    }
+}
+
+/// Helper function to flatten justifications map back to state arrays
+fn flattenJustifications(allocator: Allocator, justifications: *std.AutoHashMapUnmanaged(types.Root, []u8), state: *types.BeamState) !void {
+    // right now lists are stack allocated bounded array but this will change when we have heap allocated
+    // array lists and will require allocator to reinit
+    _ = allocator;
     // Clear existing lists
     state.justifications_roots = try types.JustificationsRoots.init(0);
     state.justifications_validators = try types.JustificationsValidators.init(0);
@@ -298,9 +324,6 @@ fn process_attestations(allocator: Allocator, state: *types.BeamState, attestati
             try state.justifications_validators.append(validator_bit == 1);
         }
     }
-
-    logger.debug("poststate:historical hashes={d} justified slots ={d}\n justifications_roots:{d}\n justifications_validators={d}\n", .{ state.historical_block_hashes.len(), state.justified_slots.len(), state.justifications_roots.len(), state.justifications_validators.len() });
-    logger.debug("poststate: justified={any} finalized={any}", .{ state.latest_justified, state.latest_finalized });
 }
 
 fn process_block(allocator: Allocator, state: *types.BeamState, block: types.BeamBlock, logger: zeam_utils.ModuleLogger) !void {
