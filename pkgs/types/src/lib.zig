@@ -74,6 +74,10 @@ pub const SignedBeamBlock = struct {
     message: BeamBlock,
     // winternitz signature might be of different size depending on num chunks and chunk size
     signature: Bytes4000,
+    pub fn deinit(self: *SignedBeamBlock) void {
+        // Deinit heap allocated ArrayLists
+        self.message.body.attestations.deinit();
+    }
 };
 
 // PQ devnet0 config
@@ -180,7 +184,7 @@ test "ssz seralize/deserialize signed beam block" {
         },
         .signature = [_]u8{2} ** SIGSIZE,
     };
-    defer signed_block.message.body.attestations.deinit();
+    defer signed_block.deinit();
 
     // check SignedBeamBlock serialization/deserialization
     var serialized_signed_block = std.ArrayList(u8).init(std.testing.allocator);
@@ -229,9 +233,13 @@ test "ssz seralize/deserialize signed beam state" {
             try roots.append(genesis_root);
             break :blk roots;
         },
-        // the init to max size will fill the list and works because the list doesn't store delimiter
-        // else one needs to go through the append route
-        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(std.testing.allocator),
+        .justifications_validators = blk: {
+            var validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(std.testing.allocator);
+            try validators.append(true);
+            try validators.append(false);
+            try validators.append(true);
+            break :blk validators;
+        },
     };
     defer state.deinit();
 
@@ -286,7 +294,14 @@ test "ssz seralize/deserialize signed stf prover input" {
             try roots.append(genesis_root);
             break :blk roots;
         },
-        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(std.testing.allocator),
+        .justifications_validators = blk: {
+            var validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(std.testing.allocator);
+            try validators.append(true);
+            try validators.append(false);
+            try validators.append(true);
+            try validators.append(false);
+            break :blk validators;
+        },
         // .justifications = .{
         //     .roots = &[_]Root{},
         //     .voting_validators = &[_]u8{},
