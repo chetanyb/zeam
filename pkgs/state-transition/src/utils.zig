@@ -64,14 +64,14 @@ pub fn genGenesisBlock(allocator: Allocator, genesis_state: types.BeamState) !ty
         .body = types.BeamBlockBody{
             // .execution_payload_header = .{ .timestamp = 0 },
             // 3sf mini
-            .attestations = try types.SignedVotes.init(0),
+            .attestations = try types.SignedVotes.init(allocator),
         },
     };
 
     return genesis_latest_block;
 }
 
-pub fn genGenesisLatestBlock() !types.BeamBlock {
+pub fn genGenesisLatestBlock(allocator: Allocator) !types.BeamBlock {
     const genesis_latest_block = types.BeamBlock{
         .slot = 0,
         .proposer_index = 0,
@@ -80,7 +80,7 @@ pub fn genGenesisLatestBlock() !types.BeamBlock {
         .body = types.BeamBlockBody{
             // .execution_payload_header = .{ .timestamp = 0 },
             // 3sf mini votes
-            .attestations = try types.SignedVotes.init(0),
+            .attestations = try types.SignedVotes.init(allocator),
         },
     };
 
@@ -88,7 +88,7 @@ pub fn genGenesisLatestBlock() !types.BeamBlock {
 }
 
 pub fn genGenesisState(allocator: Allocator, genesis: types.GenesisSpec) !types.BeamState {
-    const genesis_latest_block = try genGenesisLatestBlock();
+    const genesis_latest_block = try genGenesisLatestBlock(allocator);
 
     const state = types.BeamState{
         .config = .{
@@ -100,11 +100,11 @@ pub fn genGenesisState(allocator: Allocator, genesis: types.GenesisSpec) !types.
         // mini3sf
         .latest_justified = .{ .root = [_]u8{0} ** 32, .slot = 0 },
         .latest_finalized = .{ .root = [_]u8{0} ** 32, .slot = 0 },
-        .historical_block_hashes = try types.HistoricalBlockHashes.init(0),
-        .justified_slots = try types.JustifiedSlots.init(0),
+        .historical_block_hashes = try types.HistoricalBlockHashes.init(allocator),
+        .justified_slots = try types.JustifiedSlots.init(allocator),
         // justifications map is empty
-        .justifications_roots = try ssz.utils.List(types.Root, params.HISTORICAL_ROOTS_LIMIT).init(0),
-        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(0),
+        .justifications_roots = try ssz.utils.List(types.Root, params.HISTORICAL_ROOTS_LIMIT).init(allocator),
+        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(allocator),
     };
 
     return state;

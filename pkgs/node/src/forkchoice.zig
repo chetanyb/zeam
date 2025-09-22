@@ -372,7 +372,7 @@ pub const ForkChoice = struct {
     }
 
     pub fn getProposalVotes(self: *Self) !types.SignedVotes {
-        var included_votes = try types.SignedVotes.init(0);
+        var included_votes = try types.SignedVotes.init(self.allocator);
         const latest_justified = self.fcStore.latest_justified;
 
         // TODO naive strategy to include all votes that are consistent with the latest justified

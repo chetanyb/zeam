@@ -294,12 +294,12 @@ fn loadJustifications(allocator: Allocator, justifications: *std.AutoHashMapUnma
 
 /// Helper function to flatten justifications map back to state arrays
 fn flattenJustifications(allocator: Allocator, justifications: *std.AutoHashMapUnmanaged(types.Root, []u8), state: *types.BeamState) !void {
-    // right now lists are stack allocated bounded array but this will change when we have heap allocated
-    // array lists and will require allocator to reinit
-    _ = allocator;
-    // Clear existing lists
-    state.justifications_roots = try types.JustificationsRoots.init(0);
-    state.justifications_validators = try types.JustificationsValidators.init(0);
+    // Lists are now heap allocated ArrayLists using the allocator
+    // Deinit existing lists and reinitialize
+    state.justifications_roots.deinit();
+    state.justifications_validators.deinit();
+    state.justifications_roots = try types.JustificationsRoots.init(allocator);
+    state.justifications_validators = try types.JustificationsValidators.init(allocator);
 
     // First, collect all keys
     var iterator = justifications.iterator();
