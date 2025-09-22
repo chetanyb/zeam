@@ -109,11 +109,12 @@ pub const BeamState = struct {
     justifications_roots: JustificationsRoots,
     justifications_validators: JustificationsValidators,
 
-    pub fn deinit(self: *BeamState, allocator: Allocator) void {
-        _ = self;
-        _ = allocator;
-        // all lists are stack allocated bounded arrays, de-alloc them when impl changes
-        // to heap allocation
+    pub fn deinit(self: *BeamState) void {
+        // Deinit heap allocated ArrayLists
+        self.historical_block_hashes.deinit();
+        self.justified_slots.deinit();
+        self.justifications_roots.deinit();
+        self.justifications_validators.deinit();
     }
 };
 
@@ -165,7 +166,7 @@ test "ssz import" {
 }
 
 test "ssz seralize/deserialize signed beam block" {
-    const signed_block = SignedBeamBlock{
+    var signed_block = SignedBeamBlock{
         .message = .{
             .slot = 9,
             .proposer_index = 3,
@@ -174,11 +175,12 @@ test "ssz seralize/deserialize signed beam block" {
             .body = .{
                 //
                 // .execution_payload_header = ExecutionPayloadHeader{ .timestamp = 23 },
-                .attestations = try SignedVotes.init(0),
+                .attestations = try SignedVotes.init(std.testing.allocator),
             },
         },
         .signature = [_]u8{2} ** SIGSIZE,
     };
+    defer signed_block.message.body.attestations.deinit();
 
     // check SignedBeamBlock serialization/deserialization
     var serialized_signed_block = std.ArrayList(u8).init(std.testing.allocator);
@@ -207,7 +209,7 @@ test "ssz seralize/deserialize signed beam state" {
     const config = BeamStateConfig{ .num_validators = 4, .genesis_time = 93 };
     const genesis_root = [_]u8{9} ** 32;
 
-    const state = BeamState{
+    var state = BeamState{
         .config = config,
         .slot = 99,
         .latest_block_header = .{
@@ -220,17 +222,18 @@ test "ssz seralize/deserialize signed beam state" {
         // mini3sf
         .latest_justified = .{ .root = [_]u8{5} ** 32, .slot = 0 },
         .latest_finalized = .{ .root = [_]u8{4} ** 32, .slot = 0 },
-        .historical_block_hashes = try HistoricalBlockHashes.init(0),
-        .justified_slots = try JustifiedSlots.init(0),
+        .historical_block_hashes = try HistoricalBlockHashes.init(std.testing.allocator),
+        .justified_slots = try JustifiedSlots.init(std.testing.allocator),
         .justifications_roots = blk: {
-            var roots = try ssz.utils.List(Root, params.HISTORICAL_ROOTS_LIMIT).init(0);
+            var roots = try ssz.utils.List(Root, params.HISTORICAL_ROOTS_LIMIT).init(std.testing.allocator);
             try roots.append(genesis_root);
             break :blk roots;
         },
         // the init to max size will fill the list and works because the list doesn't store delimiter
         // else one needs to go through the append route
-        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT),
+        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(std.testing.allocator),
     };
+    defer state.deinit();
 
     var serialized_state = std.ArrayList(u8).init(std.testing.allocator);
     defer serialized_state.deinit();
@@ -263,7 +266,7 @@ test "ssz seralize/deserialize signed stf prover input" {
     };
     const genesis_root = [_]u8{9} ** 32;
 
-    const state = BeamState{
+    var state = BeamState{
         .config = config,
         .slot = 99,
         .latest_block_header = .{
@@ -276,21 +279,22 @@ test "ssz seralize/deserialize signed stf prover input" {
         // mini3sf
         .latest_justified = .{ .root = [_]u8{5} ** 32, .slot = 0 },
         .latest_finalized = .{ .root = [_]u8{4} ** 32, .slot = 0 },
-        .historical_block_hashes = try HistoricalBlockHashes.init(0),
-        .justified_slots = try JustifiedSlots.init(0),
+        .historical_block_hashes = try HistoricalBlockHashes.init(std.testing.allocator),
+        .justified_slots = try JustifiedSlots.init(std.testing.allocator),
         .justifications_roots = blk: {
-            var roots = try ssz.utils.List(Root, params.HISTORICAL_ROOTS_LIMIT).init(0);
+            var roots = try ssz.utils.List(Root, params.HISTORICAL_ROOTS_LIMIT).init(std.testing.allocator);
             try roots.append(genesis_root);
             break :blk roots;
         },
-        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT),
+        .justifications_validators = try ssz.utils.Bitlist(params.HISTORICAL_ROOTS_LIMIT * params.VALIDATOR_REGISTRY_LIMIT).init(std.testing.allocator),
         // .justifications = .{
         //     .roots = &[_]Root{},
         //     .voting_validators = &[_]u8{},
         // },
     };
+    defer state.deinit();
 
-    const block = SignedBeamBlock{
+    var block = SignedBeamBlock{
         .message = .{
             .slot = 9,
             .proposer_index = 3,
@@ -299,11 +303,12 @@ test "ssz seralize/deserialize signed stf prover input" {
             .body = .{
                 //
                 // .execution_payload_header = ExecutionPayloadHeader{ .timestamp = 23 },
-                .attestations = try SignedVotes.init(0),
+                .attestations = try SignedVotes.init(std.testing.allocator),
             },
         },
         .signature = [_]u8{2} ** SIGSIZE,
     };
+    defer block.message.body.attestations.deinit();
 
     const prover_input = BeamSTFProverInput{
         .state = state,

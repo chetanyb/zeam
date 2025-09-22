@@ -81,7 +81,7 @@ pub const Node = struct {
         chain_options.num_validators = options.genesis_spec.num_validators;
         const chain_config = try ChainConfig.init(Chain.custom, chain_options);
         var anchorState = try sft.genGenesisState(allocator, chain_config.genesis);
-        errdefer anchorState.deinit(allocator);
+        errdefer anchorState.deinit();
 
         // TODO we seem to be needing one loop because then the events added to loop are not being fired
         // in the order to which they have been added even with the an appropriate delay added

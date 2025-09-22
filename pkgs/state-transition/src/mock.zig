@@ -233,7 +233,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
             .body = types.BeamBlockBody{
                 // .execution_payload_header = .{ .timestamp = timestamp },
                 .attestations = blk: {
-                    var attestations = try types.SignedVotes.init(0);
+                    var attestations = try types.SignedVotes.init(allocator);
                     for (votes.items) |vote| {
                         try attestations.append(vote);
                     }
