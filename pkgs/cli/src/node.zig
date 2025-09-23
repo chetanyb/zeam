@@ -10,6 +10,7 @@ const json = std.json;
 const ChainConfig = configs.ChainConfig;
 const Chain = configs.Chain;
 const ChainOptions = configs.ChainOptions;
+const params = @import("@zeam/params");
 const sft = @import("@zeam/state-transition");
 const xev = @import("xev");
 const networks = @import("@zeam/network");
@@ -33,6 +34,7 @@ pub const NodeOptions = struct {
     metrics_port: u16,
     local_priv_key: []const u8,
     logger_config: *LoggerConfig,
+    preset: params.Preset,
 
     pub fn deinit(self: *NodeOptions, allocator: std.mem.Allocator) void {
         for (self.bootnodes) |b| allocator.free(b);
@@ -67,10 +69,11 @@ pub const Node = struct {
             try metrics_server.startMetricsServer(allocator, options.metrics_port);
         }
 
-        // some base mainnet spec would be loaded to build this up
-        const chain_spec =
-            \\{"preset": "mainnet", "name": "beamdev"}
-        ;
+        // Create chain spec based on selected preset
+        const preset_name = @tagName(options.preset);
+        const chain_spec = try std.fmt.allocPrint(allocator, "{{\"preset\": \"{s}\", \"name\": \"beamdev\"}}", .{preset_name});
+        defer allocator.free(chain_spec);
+
         const json_options = json.ParseOptions{
             .ignore_unknown_fields = true,
             .allocate = .alloc_if_needed,
@@ -91,7 +94,7 @@ pub const Node = struct {
         const addresses = try self.constructMultiaddrs();
         self.network = try networks.EthLibp2p.init(allocator, &self.loop, .{ .networkId = 0, .listen_addresses = addresses.listen_addresses, .connect_peers = addresses.connect_peers, .local_private_key = options.local_priv_key }, options.logger_config.logger(.network));
         errdefer self.network.deinit();
-        self.clock = try Clock.init(allocator, chain_config.genesis.genesis_time, &self.loop);
+        self.clock = try Clock.init(allocator, chain_config.genesis.genesis_time, &self.loop, options.preset);
         errdefer self.clock.deinit(allocator);
 
         self.beam_node = try BeamNode.init(allocator, .{
@@ -242,6 +245,7 @@ pub fn buildStartOptions(allocator: std.mem.Allocator, node_cmd: NodeCommand, op
     opts.validator_indices = validator_indices;
     opts.local_priv_key = local_priv_key;
     opts.genesis_spec = genesis_spec;
+    opts.preset = node_cmd.preset;
 }
 
 /// Parses the nodes from a YAML configuration.

@@ -17,6 +17,8 @@ const configs = @import("@zeam/configs");
 const ChainConfig = configs.ChainConfig;
 const Chain = configs.Chain;
 const ChainOptions = configs.ChainOptions;
+const params = @import("@zeam/params");
+const Preset = params.Preset;
 
 const utils_lib = @import("@zeam/utils");
 
@@ -39,9 +41,11 @@ pub const NodeCommand = struct {
     metrics_port: u16 = constants.DEFAULT_METRICS_PORT,
     override_genesis_time: ?u64,
     network_dir: []const u8 = "./network",
+    preset: Preset = .mainnet,
 
     pub const __shorts__ = .{
         .help = .h,
+        .preset = .p,
     };
 
     pub const __messages__ = .{
@@ -51,6 +55,7 @@ pub const NodeCommand = struct {
         .metrics_enable = "Enable metrics endpoint",
         .network_dir = "Directory to store network related information, e.g., peer ids, keys, etc.",
         .override_genesis_time = "Override genesis time in the config.yaml",
+        .preset = "Preset configuration to use (mainnet or minimal). Default: mainnet",
         .help = "Show help information for the node command",
     };
 };
@@ -76,6 +81,15 @@ const ZeamArgs = struct {
             help: bool = false,
             mockNetwork: bool = false,
             metricsPort: u16 = constants.DEFAULT_METRICS_PORT,
+            preset: Preset = .mainnet,
+
+            pub const __shorts__ = .{
+                .preset = .p,
+            };
+
+            pub const __messages__ = .{
+                .preset = "Preset configuration to use (mainnet or minimal). Default: mainnet",
+            };
         },
         prove: struct {
             dist_dir: []const u8 = "zig-out/bin",
@@ -163,7 +177,7 @@ pub fn main() !void {
     switch (opts.args.__commands__) {
         .clock => {
             var loop = try xev.Loop.init(.{});
-            var clock = try Clock.init(gpa.allocator(), genesis, &loop);
+            var clock = try Clock.init(gpa.allocator(), genesis, &loop, .mainnet);
             std.debug.print("clock {any}\n", .{clock});
 
             try clock.run();
@@ -212,10 +226,11 @@ pub fn main() !void {
 
             const mock_network = beamcmd.mockNetwork;
 
-            // some base mainnet spec would be loaded to build this up
-            const chain_spec =
-                \\{"preset": "mainnet", "name": "beamdev"}
-            ;
+            // Create chain spec based on selected preset
+            const preset_name = @tagName(beamcmd.preset);
+            const chain_spec = try std.fmt.allocPrint(allocator, "{{\"preset\": \"{s}\", \"name\": \"beamdev\"}}", .{preset_name});
+            defer allocator.free(chain_spec);
+
             const options = json.ParseOptions{
                 .ignore_unknown_fields = true,
                 .allocate = .alloc_if_needed,
@@ -285,7 +300,7 @@ pub fn main() !void {
             }
 
             var clock = try allocator.create(Clock);
-            clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop);
+            clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop, beamcmd.preset);
 
             var validator_ids_1 = [_]usize{1};
             var validator_ids_2 = [_]usize{2};
@@ -338,6 +353,7 @@ pub fn main() !void {
                 .validator_indices = undefined,
                 .local_priv_key = undefined,
                 .logger_config = &zeam_logger_config,
+                .preset = leancmd.preset,
             };
 
             defer start_options.deinit(allocator);
