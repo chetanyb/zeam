@@ -304,6 +304,7 @@ pub fn main() !void {
             var clock = try allocator.create(Clock);
             clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop);
 
+            //one missing validator is by design
             var validator_ids_1 = [_]usize{1};
             var validator_ids_2 = [_]usize{2};
 
