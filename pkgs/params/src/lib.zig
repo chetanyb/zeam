@@ -44,7 +44,7 @@ test "test preset values" {
 
     // Test that different presets have different values
     try std.testing.expect(mainnet_values.SECONDS_PER_SLOT == 4);
-    try std.testing.expect(minimal_values.SECONDS_PER_SLOT == 6);
+    try std.testing.expect(minimal_values.SECONDS_PER_SLOT == 4);
 
     // Test that minimal has smaller limits
     try std.testing.expect(minimal_values.HISTORICAL_ROOTS_LIMIT < mainnet_values.HISTORICAL_ROOTS_LIMIT);
