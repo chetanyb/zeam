@@ -71,6 +71,11 @@ pub fn build(b: *Builder) !void {
         .optimize = optimize,
     }).module("yaml");
 
+    const snappyz = b.dependency("zig_snappy", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("snappyz");
+
     // add zeam-utils
     const zeam_utils = b.addModule("@zeam/utils", .{
         .target = target,
@@ -159,6 +164,7 @@ pub fn build(b: *Builder) !void {
     zeam_network.addImport("xev", xev);
     zeam_network.addImport("ssz", ssz);
     zeam_network.addImport("multiformats", multiformats);
+    zeam_network.addImport("snappyz", snappyz);
 
     // add beam node
     const zeam_beam_node = b.addModule("@zeam/node", .{
