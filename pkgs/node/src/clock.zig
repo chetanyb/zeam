@@ -28,14 +28,13 @@ pub const Clock = struct {
         allocator: Allocator,
         genesis_time: usize,
         loop: *xev.Loop,
-        preset: params.Preset,
+        _: params.Preset,
     ) !Self {
         const events = try utils.EventLoop.init(loop);
         const timer = try xev.Timer.init();
 
-        // Calculate seconds per interval based on the selected preset
-        const preset_values = params.getPresetValues(preset);
-        const seconds_per_interval_ms: isize = @intCast(@divFloor(preset_values.SECONDS_PER_SLOT * std.time.ms_per_s, constants.INTERVALS_PER_SLOT));
+        // Use compile-time constant for seconds per interval
+        const seconds_per_interval_ms = constants.SECONDS_PER_INTERVAL_MS;
 
         const genesis_time_ms: isize = @intCast(genesis_time * std.time.ms_per_s);
         const current_interval = @divFloor(@as(isize, @intCast(std.time.milliTimestamp())) + CLOCK_DISPARITY_MS - genesis_time_ms, seconds_per_interval_ms);
