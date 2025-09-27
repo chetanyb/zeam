@@ -41,11 +41,9 @@ pub const NodeCommand = struct {
     metrics_port: u16 = constants.DEFAULT_METRICS_PORT,
     override_genesis_time: ?u64,
     network_dir: []const u8 = "./network",
-    preset: Preset = .mainnet,
 
     pub const __shorts__ = .{
         .help = .h,
-        .preset = .p,
     };
 
     pub const __messages__ = .{
@@ -55,7 +53,6 @@ pub const NodeCommand = struct {
         .metrics_enable = "Enable metrics endpoint",
         .network_dir = "Directory to store network related information, e.g., peer ids, keys, etc.",
         .override_genesis_time = "Override genesis time in the config.yaml",
-        .preset = "Preset configuration to use (mainnet or minimal). Default: mainnet",
         .help = "Show help information for the node command",
     };
 };
@@ -81,15 +78,8 @@ const ZeamArgs = struct {
             help: bool = false,
             mockNetwork: bool = false,
             metricsPort: u16 = constants.DEFAULT_METRICS_PORT,
-            preset: Preset = .mainnet,
 
-            pub const __shorts__ = .{
-                .preset = .p,
-            };
-
-            pub const __messages__ = .{
-                .preset = "Preset configuration to use (mainnet or minimal). Default: mainnet",
-            };
+            pub const __messages__ = .{};
         },
         prove: struct {
             dist_dir: []const u8 = "zig-out/bin",
@@ -177,7 +167,7 @@ pub fn main() !void {
     switch (opts.args.__commands__) {
         .clock => {
             var loop = try xev.Loop.init(.{});
-            var clock = try Clock.init(gpa.allocator(), genesis, &loop, .mainnet);
+            var clock = try Clock.init(gpa.allocator(), genesis, &loop, params.activePreset);
             std.debug.print("clock {any}\n", .{clock});
 
             try clock.run();
@@ -226,8 +216,8 @@ pub fn main() !void {
 
             const mock_network = beamcmd.mockNetwork;
 
-            // Create chain spec based on selected preset
-            const preset_name = @tagName(beamcmd.preset);
+            // Create chain spec based on compile-time preset
+            const preset_name = @tagName(params.activePreset);
             const chain_spec = try std.fmt.allocPrint(allocator, "{{\"preset\": \"{s}\", \"name\": \"beamdev\"}}", .{preset_name});
             defer allocator.free(chain_spec);
 
@@ -317,7 +307,7 @@ pub fn main() !void {
             }
 
             var clock = try allocator.create(Clock);
-            clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop, beamcmd.preset);
+            clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop, params.activePreset);
 
             var validator_ids_1 = [_]usize{1};
             var validator_ids_2 = [_]usize{2};
@@ -370,7 +360,7 @@ pub fn main() !void {
                 .validator_indices = undefined,
                 .local_priv_key = undefined,
                 .logger_config = &zeam_logger_config,
-                .preset = leancmd.preset,
+                .preset = params.activePreset,
             };
 
             defer start_options.deinit(allocator);

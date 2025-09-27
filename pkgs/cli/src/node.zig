@@ -277,7 +277,6 @@ pub fn buildStartOptions(allocator: std.mem.Allocator, node_cmd: NodeCommand, op
     opts.validator_indices = validator_indices;
     opts.local_priv_key = local_priv_key;
     opts.genesis_spec = genesis_spec;
-    opts.preset = node_cmd.preset;
 }
 
 /// Parses the nodes from a YAML configuration.
