@@ -21,6 +21,8 @@ const types = @import("@zeam/types");
 const LoggerConfig = utils_lib.ZeamLoggerConfig;
 const NodeCommand = @import("main.zig").NodeCommand;
 const zeam_utils = @import("@zeam/utils");
+const constants = @import("constants.zig");
+const database = @import("@zeam/database");
 
 const prefix = "zeam_";
 
@@ -53,6 +55,7 @@ pub const Node = struct {
     options: *const NodeOptions,
     allocator: std.mem.Allocator,
     logger: zeam_utils.ModuleLogger,
+    db: database.Db,
 
     const Self = @This();
 
@@ -102,6 +105,9 @@ pub const Node = struct {
         self.clock = try Clock.init(allocator, chain_config.genesis.genesis_time, &self.loop);
         errdefer self.clock.deinit(allocator);
 
+        var db = try database.Db.open(allocator, options.logger_config.logger(.database), constants.DEFAULT_DB_PATH);
+        errdefer db.deinit();
+
         self.beam_node = try BeamNode.init(allocator, .{
             // options
             .nodeId = node_id,
@@ -109,8 +115,8 @@ pub const Node = struct {
             .anchorState = &anchorState,
             .backend = self.network.getNetworkInterface(),
             .clock = &self.clock,
-            .db = .{},
             .validator_ids = options.validator_indices,
+            .db = db,
             .logger_config = options.logger_config,
         });
 
@@ -122,6 +128,7 @@ pub const Node = struct {
         self.beam_node.deinit();
         self.network.deinit();
         self.enr.deinit();
+        self.db.deinit();
         self.loop.deinit();
     }
 

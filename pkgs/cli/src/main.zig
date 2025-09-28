@@ -20,6 +20,8 @@ const ChainOptions = configs.ChainOptions;
 
 const utils_lib = @import("@zeam/utils");
 
+const database = @import("@zeam/database");
+
 const sft_factory = @import("@zeam/state-transition");
 const api = @import("@zeam/api");
 const api_server = @import("api_server.zig");
@@ -76,6 +78,7 @@ const ZeamArgs = struct {
             help: bool = false,
             mockNetwork: bool = false,
             metricsPort: u16 = constants.DEFAULT_METRICS_PORT,
+            db_path: []const u8 = constants.DEFAULT_DB_PATH,
         },
         prove: struct {
             dist_dir: []const u8 = "zig-out/bin",
@@ -309,6 +312,16 @@ pub fn main() !void {
             var validator_ids_1 = [_]usize{1};
             var validator_ids_2 = [_]usize{2};
 
+            const db_path_1 = try std.fmt.allocPrint(allocator, "{s}/node1", .{beamcmd.db_path});
+            defer allocator.free(db_path_1);
+            const db_path_2 = try std.fmt.allocPrint(allocator, "{s}/node2", .{beamcmd.db_path});
+            defer allocator.free(db_path_2);
+
+            var db_1 = try database.Db.open(allocator, logger1_config.logger(.database), db_path_1);
+            defer db_1.deinit();
+            var db_2 = try database.Db.open(allocator, logger2_config.logger(.database), db_path_2);
+            defer db_2.deinit();
+
             var beam_node_1 = try BeamNode.init(allocator, .{
                 // options
                 .nodeId = 0,
@@ -316,8 +329,8 @@ pub fn main() !void {
                 .anchorState = &anchorState,
                 .backend = backend1,
                 .clock = clock,
-                .db = .{},
                 .validator_ids = &validator_ids_1,
+                .db = db_1,
                 .logger_config = &logger1_config,
             });
             var beam_node_2 = try BeamNode.init(allocator, .{
@@ -327,8 +340,8 @@ pub fn main() !void {
                 .anchorState = &anchorState,
                 .backend = backend2,
                 .clock = clock,
-                .db = .{},
                 .validator_ids = &validator_ids_2,
+                .db = db_2,
                 .logger_config = &logger2_config,
             });
 
