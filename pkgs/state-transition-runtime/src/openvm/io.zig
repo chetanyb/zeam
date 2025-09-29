@@ -1,6 +1,5 @@
 const std = @import("std");
 
-
 pub fn print_str(str: []const u8) void {
     // OpenVM debug print instruction
     // Uses custom RISC-V instruction encoding for debug output
