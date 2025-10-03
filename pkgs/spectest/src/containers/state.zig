@@ -4,6 +4,8 @@ const configs = @import("@zeam/configs");
 const types = @import("@zeam/types");
 const ssz = @import("ssz");
 const params = @import("@zeam/params");
+const stf = @import("@zeam/state-transition");
+const zeam_utils = @import("@zeam/utils");
 
 fn sampleConfig() types.BeamStateConfig {
     return .{
@@ -272,4 +274,110 @@ test "test_with_justifications_deterministic_order" {
         const vote = try base_state.justifications_validators.get(i);
         try std.testing.expect(vote);
     }
+}
+
+test "test_process_attestations_justification_and_finalization" {
+    const allocator = std.testing.allocator;
+
+    // Generate genesis state
+    const config = types.GenesisSpec{
+        .genesis_time = 0,
+        .num_validators = 10,
+    };
+    var state = try stf.genGenesisState(allocator, config);
+    defer state.deinit();
+
+    var logger_config = zeam_utils.getTestLoggerConfig();
+    const logger = logger_config.logger(.state_transition);
+
+    // Move to slot 1 to allow producing a block there
+    try stf.process_slots(allocator, &state, 1, logger);
+
+    // Create and process the block at slot 1
+    var block1_body = types.BeamBlockBody{
+        .attestations = try types.SignedVotes.init(allocator),
+    };
+    defer block1_body.attestations.deinit();
+
+    var block1_parent_root: types.Root = undefined;
+    try ssz.hashTreeRoot(types.BeamBlockHeader, state.latest_block_header, &block1_parent_root, allocator);
+
+    const block1 = types.BeamBlock{
+        .slot = 1,
+        .proposer_index = 1 % 10,
+        .parent_root = block1_parent_root,
+        .state_root = [_]u8{0} ** 32,
+        .body = block1_body,
+    };
+
+    try stf.process_block(allocator, &state, block1, logger);
+
+    // Move to slot 4 and produce a block
+    try stf.process_slots(allocator, &state, 4, logger);
+
+    var block4_body = types.BeamBlockBody{
+        .attestations = try types.SignedVotes.init(allocator),
+    };
+    defer block4_body.attestations.deinit();
+
+    var block4_parent_root: types.Root = undefined;
+    try ssz.hashTreeRoot(types.BeamBlockHeader, state.latest_block_header, &block4_parent_root, allocator);
+
+    const block4 = types.BeamBlock{
+        .slot = 4,
+        .proposer_index = 4 % 10,
+        .parent_root = block4_parent_root,
+        .state_root = [_]u8{0} ** 32,
+        .body = block4_body,
+    };
+
+    try stf.process_block(allocator, &state, block4, logger);
+
+    // Advance to slot 5 so the header at slot 4 caches its state root
+    try stf.process_slots(allocator, &state, 5, logger);
+
+    // Define source (genesis) and target (slot 4) checkpoints for voting
+    const genesis_checkpoint = types.Mini3SFCheckpoint{
+        .root = try state.historical_block_hashes.get(0),
+        .slot = 0,
+    };
+
+    var checkpoint4_root: types.Root = undefined;
+    try ssz.hashTreeRoot(types.BeamBlockHeader, state.latest_block_header, &checkpoint4_root, allocator);
+    const checkpoint4 = types.Mini3SFCheckpoint{
+        .root = checkpoint4_root,
+        .slot = 4,
+    };
+
+    // Create 7 votes from distinct validators (indices 0..6) to reach ≥2/3
+    var votes_for_4 = try types.SignedVotes.init(allocator);
+    defer votes_for_4.deinit();
+
+    var i: u64 = 0;
+    while (i < 7) : (i += 1) {
+        const vote = types.SignedVote{
+            .validator_id = i,
+            .message = types.Mini3SFVote{
+                .slot = 4,
+                .head = checkpoint4,
+                .target = checkpoint4,
+                .source = genesis_checkpoint,
+            },
+            .signature = [_]u8{0} ** types.SIGSIZE,
+        };
+        try votes_for_4.append(vote);
+    }
+
+    // Process attestations directly
+    try stf.process_attestations(allocator, &state, votes_for_4, logger);
+
+    // The target (slot 4) should now be justified
+    try std.testing.expectEqual(checkpoint4, state.latest_justified);
+
+    // The justified bit for slot 4 must be set
+    const slot4_justified = try state.justified_slots.get(4);
+    try std.testing.expect(slot4_justified);
+
+    // Since no other justifiable slot exists between 0 and 4, genesis is finalized
+    try std.testing.expectEqual(genesis_checkpoint, state.latest_finalized);
 }

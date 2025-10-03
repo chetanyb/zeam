@@ -16,6 +16,9 @@ pub const StateTransitionError = transition.StateTransitionError;
 pub const StateTransitionOpts = transition.StateTransitionOpts;
 pub const is_justifiable_slot = transition.is_justifiable_slot;
 pub const verify_signatures = transition.verify_signatures;
+pub const process_slots = transition.process_slots;
+pub const process_block = transition.process_block;
+pub const process_attestations = transition.process_attestations;
 
 const mockImport = @import("./mock.zig");
 pub const genMockChain = mockImport.genMockChain;
