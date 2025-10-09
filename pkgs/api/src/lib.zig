@@ -38,12 +38,16 @@ pub const AttestationInvalidReason = enum {
 };
 
 // Global metrics instance
+// Note: Metrics are initialized as no-op by default. When init() is not called,
+// or when called on ZKVM targets, all metric operations are no-ops automatically.
+// This design eliminates the need for conditional checks in metric recording functions.
 var metrics = metrics_lib.initializeNoop(Metrics);
 var g_initialized: bool = false;
 
 const Metrics = struct {
     chain_onblock_duration_seconds: ChainHistogram,
     block_processing_duration_seconds: BlockProcessingHistogram,
+    lean_head_slot: LeanHeadSlotGauge,
     lean_attestations_invalid_total: LeanAttestationsInvalidCounter,
     lean_attestations_invalid_from_future_gossip: LeanAttestationsInvalidCounter,
     lean_attestations_invalid_unknown_head_gossip: LeanAttestationsInvalidCounter,
@@ -51,6 +55,7 @@ const Metrics = struct {
 
     const ChainHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 });
     const BlockProcessingHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 });
+    const LeanHeadSlotGauge = metrics_lib.Gauge(u64);
     const LeanAttestationsInvalidCounter = metrics_lib.Counter(u64);
 };
 
@@ -111,6 +116,7 @@ pub fn init(allocator: std.mem.Allocator) !void {
     metrics = .{
         .chain_onblock_duration_seconds = Metrics.ChainHistogram.init("chain_onblock_duration_seconds", .{ .help = "Time taken to process a block in the chain's onBlock function." }, .{}),
         .block_processing_duration_seconds = Metrics.BlockProcessingHistogram.init("block_processing_duration_seconds", .{ .help = "Time taken to process a block in the state transition function." }, .{}),
+        .lean_head_slot = Metrics.LeanHeadSlotGauge.init("lean_head_slot", .{ .help = "Latest slot of the lean chain." }, .{}),
         .lean_attestations_invalid_total = Metrics.LeanAttestationsInvalidCounter.init("lean_attestations_invalid_total", .{ .help = "Total number of invalid attestations." }, .{}),
         .lean_attestations_invalid_from_future_gossip = Metrics.LeanAttestationsInvalidCounter.init("lean_attestations_invalid_from_future_gossip", .{ .help = "Number of invalid attestations due to future slot during gossip processing." }, .{}),
         .lean_attestations_invalid_unknown_head_gossip = Metrics.LeanAttestationsInvalidCounter.init("lean_attestations_invalid_unknown_head_gossip", .{ .help = "Number of invalid attestations due to unknown block root during gossip processing." }, .{}),
@@ -139,6 +145,13 @@ pub const routes = @import("./routes.zig");
 // Event system modules
 pub const events = @import("./events.zig");
 pub const event_broadcaster = @import("./event_broadcaster.zig");
+
+/// Sets the lean head slot metric.
+/// This should be called whenever the fork choice head is updated.
+/// Note: Automatically no-op if metrics are not initialized or running on ZKVM.
+pub fn setLeanHeadSlot(slot: u64) void {
+    metrics.lean_head_slot.set(slot);
+}
 
 /// Increments the lean_attestations_invalid_total counter based on the provided reason.
 /// This function increments both the aggregate counter and the specific counter for the given reason.

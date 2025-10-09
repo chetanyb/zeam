@@ -26,6 +26,11 @@ The following metrics are currently available:
   - **Description**: Measures the time taken to process a block in the state transition function.
   - **Labels**: None.
 
+- **`lean_head_slot`** (Gauge)
+  - **Description**: Latest slot of the lean chain (canonical chain head as determined by fork choice).
+  - **Labels**: None.
+  - **Sample Collection Event**: Updated on every fork choice head update.
+
 - **`lean_attestations_invalid_total`** (Counter)
   - **Description**: Total number of invalid attestations across all reasons and contexts.
   - **Labels**: None.

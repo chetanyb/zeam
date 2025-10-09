@@ -37,6 +37,10 @@ pub fn startListener(allocator: std.mem.Allocator, port: u16) !void {
     _ = port;
 }
 
+pub fn setLeanHeadSlot(slot: u64) void {
+    _ = slot;
+}
+
 pub fn incrementLeanAttestationsInvalid(reason: AttestationInvalidReason) void {
     _ = reason;
 }
