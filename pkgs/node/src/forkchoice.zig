@@ -487,7 +487,12 @@ pub const ForkChoice = struct {
         const validator_id = signed_vote.validator_id;
         const vote = signed_vote.message;
         const new_head_index = self.protoArray.indices.get(vote.head.root) orelse {
-            api.incrementLeanAttestationsInvalid();
+            // Track whether this is from gossip or block processing
+            if (is_from_block) {
+                api.incrementLeanAttestationsInvalid(.unknown_head_block);
+            } else {
+                api.incrementLeanAttestationsInvalid(.unknown_head_gossip);
+            }
             return ForkChoiceError.InvalidAttestation;
         };
 
@@ -511,7 +516,7 @@ pub const ForkChoice = struct {
             }
         } else {
             if (vote.slot > self.fcStore.timeSlots) {
-                api.incrementLeanAttestationsInvalid();
+                api.incrementLeanAttestationsInvalid(.from_future_gossip);
                 return ForkChoiceError.InvalidFutureAttestation;
             }
             // just update latest new voted head of the validator
