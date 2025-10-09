@@ -26,6 +26,10 @@ The following metrics are currently available:
   - **Description**: Measures the time taken to process a block in the state transition function.
   - **Labels**: None.
 
+- **`lean_attestations_invalid_total`** (Counter)
+  - **Description**: Total number of invalid attestations.
+  - **Sample Collection Event**: Incremented when an attestation fails validation in the fork choice (`forkchoice.zig:490, 514`).
+
 ## How It Works
 
 The API system is initialized at application startup in `pkgs/cli/src/main.zig`. 
