@@ -34,9 +34,11 @@ var g_initialized: bool = false;
 const Metrics = struct {
     chain_onblock_duration_seconds: ChainHistogram,
     block_processing_duration_seconds: BlockProcessingHistogram,
+    lean_attestations_invalid_total: LeanAttestationsInvalidCounter,
 
     const ChainHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 });
     const BlockProcessingHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 });
+    const LeanAttestationsInvalidCounter = metrics_lib.Counter(u64);
 };
 
 /// Timer struct returned to the application.
@@ -96,9 +98,16 @@ pub fn init(allocator: std.mem.Allocator) !void {
     metrics = .{
         .chain_onblock_duration_seconds = Metrics.ChainHistogram.init("chain_onblock_duration_seconds", .{ .help = "Time taken to process a block in the chain's onBlock function." }, .{}),
         .block_processing_duration_seconds = Metrics.BlockProcessingHistogram.init("block_processing_duration_seconds", .{ .help = "Time taken to process a block in the state transition function." }, .{}),
+        .lean_attestations_invalid_total = Metrics.LeanAttestationsInvalidCounter.init("lean_attestations_invalid_total", .{ .help = "Total number of invalid attestations." }, .{}),
     };
 
     g_initialized = true;
+}
+
+/// Increments the lean_attestations_invalid_total counter.
+/// This should be called whenever an attestation fails validation.
+pub fn incrementLeanAttestationsInvalid() void {
+    metrics.lean_attestations_invalid_total.incr();
 }
 
 /// Writes metrics to a writer (for Prometheus endpoint).

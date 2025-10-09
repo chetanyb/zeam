@@ -7,6 +7,7 @@ const types = @import("@zeam/types");
 const configs = @import("@zeam/configs");
 const zeam_utils = @import("@zeam/utils");
 const stf = @import("@zeam/state-transition");
+const api = @import("@zeam/api");
 
 const constants = @import("./constants.zig");
 
@@ -485,7 +486,10 @@ pub const ForkChoice = struct {
         // vote has to be of an ancestor of the current slot
         const validator_id = signed_vote.validator_id;
         const vote = signed_vote.message;
-        const new_head_index = self.protoArray.indices.get(vote.head.root) orelse return ForkChoiceError.InvalidAttestation;
+        const new_head_index = self.protoArray.indices.get(vote.head.root) orelse {
+            api.incrementLeanAttestationsInvalid();
+            return ForkChoiceError.InvalidAttestation;
+        };
 
         var vote_tracker = self.votes.get(validator_id) orelse VoteTracker{};
         // update latest known voted head of the validator if already included on chain
@@ -506,7 +510,10 @@ pub const ForkChoice = struct {
                 vote_tracker.latestNew = null;
             }
         } else {
-            if (vote.slot > self.fcStore.timeSlots) return ForkChoiceError.InvalidFutureAttestation;
+            if (vote.slot > self.fcStore.timeSlots) {
+                api.incrementLeanAttestationsInvalid();
+                return ForkChoiceError.InvalidFutureAttestation;
+            }
             // just update latest new voted head of the validator
             const vote_tracker_latest_new_slot = (vote_tracker.latestNew orelse ProtoVote{}).slot;
             if (vote.slot > vote_tracker_latest_new_slot) {

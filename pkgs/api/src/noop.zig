@@ -33,3 +33,7 @@ pub fn startListener(allocator: std.mem.Allocator, port: u16) !void {
 pub fn chain_onblock_duration_seconds_start() Timer {
     return chain_onblock_duration_seconds.start();
 }
+
+pub fn incrementLeanAttestationsInvalid() void {
+    // No-op for ZKVM
+}
