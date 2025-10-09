@@ -27,8 +27,24 @@ The following metrics are currently available:
   - **Labels**: None.
 
 - **`lean_attestations_invalid_total`** (Counter)
-  - **Description**: Total number of invalid attestations.
-  - **Sample Collection Event**: Incremented when an attestation fails validation in the fork choice (`forkchoice.zig:490, 514`).
+  - **Description**: Total number of invalid attestations across all reasons and contexts.
+  - **Labels**: None.
+  - **Sample Collection Event**: Incremented whenever an attestation fails fork choice processing.
+
+- **`lean_attestations_invalid_from_future_gossip`** (Counter)
+  - **Description**: Number of invalid attestations due to future slot during gossip processing.
+  - **Labels**: None.
+  - **Sample Collection Event**: Incremented when a gossip attestation is rejected because it references a future slot.
+
+- **`lean_attestations_invalid_unknown_head_gossip`** (Counter)
+  - **Description**: Number of invalid attestations due to unknown block root during gossip processing.
+  - **Labels**: None.
+  - **Sample Collection Event**: Incremented when a gossip attestation references a block root that doesn't exist in the proto array.
+
+- **`lean_attestations_invalid_unknown_head_block`** (Counter)
+  - **Description**: Number of invalid attestations due to unknown block root during block processing.
+  - **Labels**: None.
+  - **Sample Collection Event**: Incremented when a block attestation references a block root that doesn't exist in the proto array.
 
 ## How It Works
 
