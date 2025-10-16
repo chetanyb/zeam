@@ -62,7 +62,7 @@ COPY README.md ./
 COPY .git/HEAD .git/HEAD
 COPY .git/refs .git/refs
 
-# Get git commit hash and build the project with optimizations
+# Get git commit hash
 RUN GIT_VERSION=$(cat .git/HEAD | grep -o '[0-9a-f]\{40\}' || echo "unknown") && \
     if [ -z "$GIT_VERSION" ] || [ "$GIT_VERSION" = "unknown" ]; then \
         REF=$(cat .git/HEAD | sed 's/ref: //'); \
@@ -70,6 +70,39 @@ RUN GIT_VERSION=$(cat .git/HEAD | grep -o '[0-9a-f]\{40\}' || echo "unknown") &&
     else \
         GIT_VERSION=$(echo "$GIT_VERSION" | head -c 7); \
     fi && \
+    echo "Git version: $GIT_VERSION" && \
+    echo "Fetching dependencies..." && \
+    COUNT=0 && \
+    MAX_RETRIES=3 && \
+    FETCH_SUCCESS=false && \
+    while [ $COUNT -lt $MAX_RETRIES ]; do \
+        echo "Fetch attempt $(( $COUNT + 1 )) of $MAX_RETRIES..." && \
+        if OUTPUT=$(zig build --fetch 2>&1); then \
+            echo "Dependencies fetched successfully!" && \
+            FETCH_SUCCESS=true && \
+            break; \
+        else \
+            EXIT_CODE=$? && \
+            echo "Fetch failed with exit code $EXIT_CODE" && \
+            if echo "$OUTPUT" | grep -q "EndOfStream"; then \
+                echo "EndOfStream error detected, will retry..." && \
+                COUNT=$(( $COUNT + 1 )) && \
+                if [ $COUNT -lt $MAX_RETRIES ]; then \
+                    echo "Waiting 10 seconds before retry..." && \
+                    sleep 10; \
+                fi; \
+            else \
+                echo "Non-retryable fetch error:" && \
+                echo "$OUTPUT" && \
+                exit $EXIT_CODE; \
+            fi; \
+        fi; \
+    done && \
+    if [ "$FETCH_SUCCESS" = false ]; then \
+        echo "Dependency fetch failed after $MAX_RETRIES attempts" && \
+        exit 1; \
+    fi && \
+    echo "Building project with optimizations..." && \
     zig build -Doptimize=ReleaseFast -Dgit_version="$GIT_VERSION"
 
 # Intermediate stage to prepare runtime libraries
