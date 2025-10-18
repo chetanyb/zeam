@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const json = std.json;
 
 const types = @import("@zeam/types");
 const xev = @import("xev");
@@ -30,9 +31,20 @@ pub const ReqResp = struct {
     onReqFn: *const fn (ptr: *anyopaque, data: *ReqRespRequest) anyerror!void,
 };
 
+pub const PeerEvents = struct {
+    // ptr to the implementation
+    ptr: *anyopaque,
+    subscribeFn: *const fn (ptr: *anyopaque, handler: OnPeerEventCbHandler) anyerror!void,
+
+    pub fn subscribe(self: PeerEvents, handler: OnPeerEventCbHandler) anyerror!void {
+        return self.subscribeFn(self.ptr, handler);
+    }
+};
+
 pub const NetworkInterface = struct {
     gossip: GossipSub,
     reqresp: ReqResp,
+    peers: PeerEvents,
 };
 
 const OnGossipCbType = *const fn (*anyopaque, *const GossipMessage) anyerror!void;
@@ -73,8 +85,12 @@ pub const LeanNetworkTopic = struct {
         };
     }
 
-    pub fn encode(self: *const LeanNetworkTopic) ![:0]u8 {
+    pub fn encodeZ(self: *const LeanNetworkTopic) ![:0]u8 {
         return try std.fmt.allocPrintZ(self.allocator, "/{s}/{s}/{s}/{s}", .{ topic_prefix, self.network, self.gossip_topic.encode(), self.encoding.encode() });
+    }
+
+    pub fn encode(self: *const LeanNetworkTopic) ![]u8 {
+        return try std.fmt.allocPrint(self.allocator, "/{s}/{s}/{s}/{s}", .{ topic_prefix, self.network, self.gossip_topic.encode(), self.encoding.encode() });
     }
 
     // topic format: /leanconsensus/<network>/<name>/<encoding>
@@ -139,14 +155,34 @@ pub const GossipMessage = union(GossipTopic) {
 
         switch (self.*) {
             .block => {
-                cloned_data.* = .{ .block = try types.sszClone(allocator, types.SignedBeamBlock, self.block) };
+                cloned_data.* = .{ .block = undefined };
+                try types.sszClone(allocator, types.SignedBeamBlock, self.block, &cloned_data.block);
             },
             .vote => {
-                cloned_data.* = .{ .vote = try types.sszClone(allocator, types.SignedVote, self.vote) };
+                cloned_data.* = .{ .vote = undefined };
+                try types.sszClone(allocator, types.SignedVote, self.vote, &cloned_data.vote);
             },
         }
 
         return cloned_data;
+    }
+
+    pub fn toJson(self: *const Self, allocator: Allocator) !json.Value {
+        return switch (self.*) {
+            .block => |block| block.toJson(allocator) catch |e| {
+                std.log.err("Failed to convert block to JSON: {any}", .{e});
+                return e;
+            },
+            .vote => |vote| vote.toJson(allocator) catch |e| {
+                std.log.err("Failed to convert vote to JSON: {any}", .{e});
+                return e;
+            },
+        };
+    }
+
+    pub fn toJsonString(self: *const Self, allocator: Allocator) ![]const u8 {
+        const message_json = try self.toJson(allocator);
+        return zeam_utils.jsonToString(allocator, message_json);
     }
 };
 
@@ -158,10 +194,91 @@ pub const ReqRespRequest = union(ReqRespMethod) {
 };
 
 const MessagePublishWrapper = struct {
+    allocator: Allocator,
     handler: OnGossipCbHandler,
     data: *const GossipMessage,
     networkId: u32,
     logger: zeam_utils.ModuleLogger,
+
+    const Self = @This();
+
+    fn init(allocator: Allocator, handler: OnGossipCbHandler, data: *const GossipMessage, networkId: u32, logger: zeam_utils.ModuleLogger) !*Self {
+        const cloned_data = try data.clone(allocator);
+
+        const self = try allocator.create(Self);
+        self.* = MessagePublishWrapper{
+            .allocator = allocator,
+            .handler = handler,
+            .data = cloned_data,
+            .networkId = networkId,
+            .logger = logger,
+        };
+        return self;
+    }
+
+    fn deinit(self: *Self) void {
+        self.allocator.destroy(self.data);
+        self.allocator.destroy(self);
+    }
+};
+
+pub const OnPeerEventCbType = *const fn (*anyopaque, peer_id: []const u8) anyerror!void;
+pub const OnPeerEventCbHandler = struct {
+    ptr: *anyopaque,
+    onPeerConnectedCb: OnPeerEventCbType,
+    onPeerDisconnectedCb: OnPeerEventCbType,
+
+    pub fn onPeerConnected(self: OnPeerEventCbHandler, peer_id: []const u8) anyerror!void {
+        return self.onPeerConnectedCb(self.ptr, peer_id);
+    }
+
+    pub fn onPeerDisconnected(self: OnPeerEventCbHandler, peer_id: []const u8) anyerror!void {
+        return self.onPeerDisconnectedCb(self.ptr, peer_id);
+    }
+};
+
+pub const PeerEventHandler = struct {
+    allocator: Allocator,
+    handlers: std.ArrayListUnmanaged(OnPeerEventCbHandler),
+    networkId: u32,
+    logger: zeam_utils.ModuleLogger,
+
+    const Self = @This();
+
+    pub fn init(allocator: Allocator, networkId: u32, logger: zeam_utils.ModuleLogger) !Self {
+        return Self{
+            .allocator = allocator,
+            .handlers = .empty,
+            .networkId = networkId,
+            .logger = logger,
+        };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.handlers.deinit(self.allocator);
+    }
+
+    pub fn subscribe(self: *Self, handler: OnPeerEventCbHandler) !void {
+        try self.handlers.append(self.allocator, handler);
+    }
+
+    pub fn onPeerConnected(self: *Self, peer_id: []const u8) anyerror!void {
+        self.logger.debug("network-{d}:: PeerEventHandler.onPeerConnected peer_id={s}, handlers={d}", .{ self.networkId, peer_id, self.handlers.items.len });
+        for (self.handlers.items) |handler| {
+            handler.onPeerConnected(peer_id) catch |e| {
+                self.logger.err("network-{d}:: onPeerConnected handler error={any}", .{ self.networkId, e });
+            };
+        }
+    }
+
+    pub fn onPeerDisconnected(self: *Self, peer_id: []const u8) anyerror!void {
+        self.logger.debug("network-{d}:: PeerEventHandler.onPeerDisconnected peer_id={s}, handlers={d}", .{ self.networkId, peer_id, self.handlers.items.len });
+        for (self.handlers.items) |handler| {
+            handler.onPeerDisconnected(peer_id) catch |e| {
+                self.logger.err("network-{d}:: onPeerDisconnected handler error={any}", .{ self.networkId, e });
+            };
+        }
+    }
 };
 
 pub const GenericGossipHandler = struct {
@@ -221,26 +338,17 @@ pub const GenericGossipHandler = struct {
             // TODO: figure out why scheduling on the loop is not working for libp2p separate net instance
             // remove this option once resolved
             if (scheduleOnLoop) {
-                // TODO: track and dealloc the structures
-                const c = try self.allocator.create(xev.Completion);
-                c.* = undefined;
+                const publishWrapper = try MessagePublishWrapper.init(self.allocator, handler, data, self.networkId, self.logger);
 
-                const publishWrapper = try self.allocator.create(MessagePublishWrapper);
-                const cloned_data = try data.clone(self.allocator);
-
-                publishWrapper.* = MessagePublishWrapper{
-                    .handler = handler,
-                    // clone the data to be independently deallocated as the mock network publish will
-                    // return the callflow back and it might dealloc the data before loop and process it
-                    .data = cloned_data,
-                    .networkId = self.networkId,
-                    .logger = self.logger,
-                };
                 self.logger.debug("network-{d}:: scheduling ongossip publishWrapper={any} on loop for topic {any}", .{ self.networkId, gossip_topic, publishWrapper });
+
+                // Create a separate completion object for each handler to avoid conflicts
+                const completion = try self.allocator.create(xev.Completion);
+                completion.* = undefined;
 
                 self.timer.run(
                     self.loop,
-                    c,
+                    completion,
                     1,
                     MessagePublishWrapper,
                     publishWrapper,
@@ -248,16 +356,17 @@ pub const GenericGossipHandler = struct {
                         fn callback(
                             ud: ?*MessagePublishWrapper,
                             _: *xev.Loop,
-                            _: *xev.Completion,
+                            c: *xev.Completion,
                             r: xev.Timer.RunError!void,
                         ) xev.CallbackAction {
                             _ = r catch unreachable;
                             if (ud) |pwrap| {
                                 pwrap.logger.debug("network-{d}:: ONGOSSIP PUBLISH callback executed", .{pwrap.networkId});
                                 _ = pwrap.handler.onGossip(pwrap.data) catch void;
+                                defer pwrap.deinit();
+                                // Clean up the completion object
+                                pwrap.allocator.destroy(c);
                             }
-                            // TODO defer freeing the publishwrapper and its data but need handle to the allocator
-                            // also figure out how and when to best dealloc the completion
                             return .disarm;
                         }
                     }).callback,
@@ -307,7 +416,7 @@ test LeanNetworkTopic {
     var topic = try LeanNetworkTopic.init(allocator, .block, .ssz_snappy, "devnet0");
     defer topic.deinit();
 
-    const topic_str = try topic.encode();
+    const topic_str = try topic.encodeZ();
     defer allocator.free(topic_str);
 
     try std.testing.expect(std.mem.eql(u8, topic_str, "/leanconsensus/devnet0/block/ssz_snappy"));

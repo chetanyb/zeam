@@ -27,6 +27,14 @@ jobs:
       with:
         version: 0.14.1
 
+    - name: Cache Zig packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/zig
+        key: ${{ runner.os }}-zig-packages-${{ hashFiles('build.zig.zon') }}
+        restore-keys: |
+          ${{ runner.os }}-zig-packages-
+
     - name: Set up Rust/Cargo
       uses: actions-rust-lang/setup-rust-toolchain@v1
       with:
@@ -42,7 +50,7 @@ jobs:
     - name: Install risc0
       run: |
         curl -L https://risczero.com/install | bash
-        /home/runner/.risc0/bin/rzup install r0vm 3.0.0-rc.1
+        /home/runner/.risc0/bin/rzup install r0vm 3.0.3
 
     - name: run prover
       run: zig build run -- prove -z risc0

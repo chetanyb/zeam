@@ -22,9 +22,11 @@ const Preset = params.Preset;
 
 const utils_lib = @import("@zeam/utils");
 
+const database = @import("@zeam/database");
+
 const sft_factory = @import("@zeam/state-transition");
-const metrics = @import("@zeam/metrics");
-const metrics_server = @import("metrics_server.zig");
+const api = @import("@zeam/api");
+const api_server = @import("api_server.zig");
 
 const networks = @import("@zeam/network");
 
@@ -36,11 +38,23 @@ const enr_lib = @import("enr");
 pub const NodeCommand = struct {
     help: bool = false,
     custom_genesis: []const u8,
-    node_id: u32 = 0,
+    // internal libp2p network id, only matters when two or more nodes are run in same process
+    network_id: u32 = 0,
+    // the string id to pick configuration in validators.yaml/validator_config.yaml
+    @"node-id": []const u8,
+    // the private libp2p key arg currently ignored but supported to be cross client compatible for
+    // lean-quickstart standard args 1. data-dir 2. node-id 3. node-key
+    @"node-key": []const u8 = constants.DEFAULT_NODE_KEY,
+    // 1. a special value of "genesis_bootnode" for validator config means its a genesis bootnode and so
+    //   the configuration is to be picked from genesis
+    // 2. otherwise validator_config is dir path to this nodes's validator_config.yaml and validatrs.yaml
+    //   and one must use all the nodes in genesis nodes.yaml as peers
+    validator_config: []const u8,
     metrics_enable: bool = false,
     metrics_port: u16 = constants.DEFAULT_METRICS_PORT,
     override_genesis_time: ?u64,
-    network_dir: []const u8 = "./network",
+    @"network-dir": []const u8 = "./network",
+    @"data-dir": []const u8 = constants.DEFAULT_DATA_DIR,
 
     pub const __shorts__ = .{
         .help = .h,
@@ -48,11 +62,15 @@ pub const NodeCommand = struct {
 
     pub const __messages__ = .{
         .custom_genesis = "Custom genesis directory path",
-        .node_id = "Node id for this lean node",
+        .network_id = "Internal libp2p network id relevant when running nodes in same process",
+        .@"node-id" = "The node id in the genesis config for this lean node",
+        .@"node-key" = "Path to the node key file",
+        .validator_config = "Path to the validator config directory or 'genesis_bootnode'",
         .metrics_port = "Port to use for publishing metrics",
         .metrics_enable = "Enable metrics endpoint",
-        .network_dir = "Directory to store network related information, e.g., peer ids, keys, etc.",
+        .@"network-dir" = "Directory to store network related information, e.g., peer ids, keys, etc.",
         .override_genesis_time = "Override genesis time in the config.yaml",
+        .@"data-dir" = "Path to the data directory",
         .help = "Show help information for the node command",
     };
 };
@@ -60,7 +78,6 @@ pub const NodeCommand = struct {
 const ZeamArgs = struct {
     genesis: u64 = 1234,
     log_filename: []const u8 = "consensus", // Default logger filename
-    log_filepath: []const u8 = "./log", // Default logger filepath
     log_file_active_level: std.log.Level = .debug, //default log file ActiveLevel
     monocolor_file_log: bool = false, //dont log colors in log files
     console_log_level: std.log.Level = .info, //default console log level
@@ -78,6 +95,7 @@ const ZeamArgs = struct {
             help: bool = false,
             mockNetwork: bool = false,
             metricsPort: u16 = constants.DEFAULT_METRICS_PORT,
+            data_dir: []const u8 = constants.DEFAULT_DATA_DIR,
 
             pub const __messages__ = .{};
         },
@@ -135,7 +153,6 @@ const ZeamArgs = struct {
         .genesis = "Genesis time for the chain",
         .num_validators = "Number of validators",
         .log_filename = "Log Filename",
-        .log_filepath = "Log Filepath - must exist",
         .log_file_active_level = "Log File Active Level, May be separate from console log level",
         .monocolor_file_log = "Dont Log color formatted log in files for use in non color supported editors",
         .console_log_level = "Log Level for console logging",
@@ -157,7 +174,6 @@ pub fn main() !void {
     const genesis = opts.args.genesis;
     const num_validators = opts.args.num_validators;
     const log_filename = opts.args.log_filename;
-    const log_filepath = opts.args.log_filepath;
     const log_file_active_level = opts.args.log_file_active_level;
     const monocolor_file_log = opts.args.monocolor_file_log;
     const console_log_level = opts.args.console_log_level;
@@ -182,6 +198,7 @@ pub fn main() !void {
                 .zkvm = blk: switch (provecmd.zkvm) {
                     .risc0 => break :blk .{ .risc0 = .{ .program_path = "zig-out/bin/risc0_runtime.elf" } },
                     .powdr => return error.PowdrIsDeprecated,
+                    .openvm => break :blk .{ .openvm = .{ .program_path = "zig-out/bin/zeam-stf-openvm", .result_path = "/tmp/openvm-results" } },
                 },
                 .logger = logger,
             };
@@ -207,10 +224,10 @@ pub fn main() !void {
             }
         },
         .beam => |beamcmd| {
-            try metrics.init(allocator);
+            try api.init(allocator);
 
             // Start metrics HTTP server
-            try metrics_server.startMetricsServer(allocator, beamcmd.metricsPort);
+            try api_server.startAPIServer(allocator, beamcmd.metricsPort);
 
             std.debug.print("beam opts ={any}\n", .{beamcmd});
 
@@ -234,7 +251,9 @@ pub fn main() !void {
             chain_options.num_validators = num_validators;
             // transfer ownership of the chain_options to ChainConfig
             const chain_config = try ChainConfig.init(Chain.custom, chain_options);
-            const anchorState = try sft_factory.genGenesisState(gpa.allocator(), chain_config.genesis);
+            var anchorState: types.BeamState = undefined;
+            try anchorState.genGenesisState(gpa.allocator(), chain_config.genesis);
+            defer anchorState.deinit();
 
             // TODO we seem to be needing one loop because then the events added to loop are not being fired
             // in the order to which they have been added even with the an appropriate delay added
@@ -242,22 +261,31 @@ pub fn main() !void {
             const loop = try allocator.create(xev.Loop);
             loop.* = try xev.Loop.init(.{});
 
-            // Ensure log directory exists if log_filepath is not provided or is the default "./log"
-            if (std.mem.eql(u8, log_filepath, "./log")) {
-                var cwd = std.fs.cwd();
-                if (cwd.openDir(log_filepath, .{})) |_| {} else |_| {
-                    cwd.makeDir(log_filepath) catch |err| {
-                        std.debug.print("ERROR : Failed to create log directory: {any}\n", .{err});
-                    };
-                }
-            }
+            try std.fs.cwd().makePath(beamcmd.data_dir);
 
             // Create loggers first so they can be passed to network implementations
-            var logger1_config = utils_lib.getScopedLoggerConfig(.n1, console_log_level, utils_lib.FileBehaviourParams{ .fileActiveLevel = log_file_active_level, .filePath = log_filepath, .fileName = log_filename, .monocolorFile = monocolor_file_log });
-            var logger2_config = utils_lib.getScopedLoggerConfig(.n2, console_log_level, utils_lib.FileBehaviourParams{ .fileActiveLevel = log_file_active_level, .filePath = log_filepath, .fileName = log_filename, .monocolorFile = monocolor_file_log });
+            var logger1_config = utils_lib.getScopedLoggerConfig(.n1, console_log_level, utils_lib.FileBehaviourParams{ .fileActiveLevel = log_file_active_level, .filePath = beamcmd.data_dir, .fileName = log_filename, .monocolorFile = monocolor_file_log });
+            var logger2_config = utils_lib.getScopedLoggerConfig(.n2, console_log_level, utils_lib.FileBehaviourParams{ .fileActiveLevel = log_file_active_level, .filePath = beamcmd.data_dir, .fileName = log_filename, .monocolorFile = monocolor_file_log });
 
             var backend1: networks.NetworkInterface = undefined;
             var backend2: networks.NetworkInterface = undefined;
+
+            // These are owned by the network implementations and will be freed in their deinit functions
+            // We will run network1 and network2 after the nodes are running to avoid race conditions
+            var network1: *networks.EthLibp2p = undefined;
+            var network2: *networks.EthLibp2p = undefined;
+            var listen_addresses1: []Multiaddr = undefined;
+            var listen_addresses2: []Multiaddr = undefined;
+            var connect_peers: []Multiaddr = undefined;
+            defer {
+                for (listen_addresses1) |addr| addr.deinit();
+                allocator.free(listen_addresses1);
+                for (listen_addresses2) |addr| addr.deinit();
+                allocator.free(listen_addresses2);
+                for (connect_peers) |addr| addr.deinit();
+                allocator.free(connect_peers);
+            }
+
             if (mock_network) {
                 var network: *networks.Mock = try allocator.create(networks.Mock);
                 network.* = try networks.Mock.init(allocator, loop, logger1_config.logger(.network));
@@ -265,12 +293,10 @@ pub fn main() !void {
                 backend2 = network.getNetworkInterface();
                 logger1_config.logger(null).debug("--- mock gossip {any}", .{backend1.gossip});
             } else {
-                var network1: *networks.EthLibp2p = try allocator.create(networks.EthLibp2p);
+                network1 = try allocator.create(networks.EthLibp2p);
                 const key_pair1 = enr_lib.KeyPair.generate();
                 const priv_key1 = key_pair1.v4.toString();
-                const listen_addresses1 = &[_]Multiaddr{try Multiaddr.fromString(allocator, "/ip4/0.0.0.0/tcp/9001")};
-                // these addresses are converted to a slice in the `run` function of `EthLibp2p` so it can be freed safely after `run` returns
-                defer for (listen_addresses1) |addr| addr.deinit();
+                listen_addresses1 = try allocator.dupe(Multiaddr, &[_]Multiaddr{try Multiaddr.fromString(allocator, "/ip4/0.0.0.0/tcp/9001")});
                 const network_name1 = try allocator.dupe(u8, chain_config.spec.name);
                 errdefer allocator.free(network_name1);
                 network1.* = try networks.EthLibp2p.init(allocator, loop, .{
@@ -280,18 +306,14 @@ pub fn main() !void {
                     .listen_addresses = listen_addresses1,
                     .connect_peers = null,
                 }, logger1_config.logger(.network));
-                try network1.run();
                 backend1 = network1.getNetworkInterface();
 
                 // init a new lib2p network here to connect with network1
-                var network2: *networks.EthLibp2p = try allocator.create(networks.EthLibp2p);
+                network2 = try allocator.create(networks.EthLibp2p);
                 const key_pair2 = enr_lib.KeyPair.generate();
                 const priv_key2 = key_pair2.v4.toString();
-                // these addresses are converted to a slice in the `run` function of `EthLibp2p` so it can be freed safely after `run` returns
-                const listen_addresses2 = &[_]Multiaddr{try Multiaddr.fromString(allocator, "/ip4/0.0.0.0/tcp/9002")};
-                defer for (listen_addresses2) |addr| addr.deinit();
-                const connect_peers = &[_]Multiaddr{try Multiaddr.fromString(allocator, "/ip4/127.0.0.1/tcp/9001")};
-                defer for (connect_peers) |addr| addr.deinit();
+                listen_addresses2 = try allocator.dupe(Multiaddr, &[_]Multiaddr{try Multiaddr.fromString(allocator, "/ip4/0.0.0.0/tcp/9002")});
+                connect_peers = try allocator.dupe(Multiaddr, &[_]Multiaddr{try Multiaddr.fromString(allocator, "/ip4/127.0.0.1/tcp/9001")});
                 const network_name2 = try allocator.dupe(u8, chain_config.spec.name);
                 errdefer allocator.free(network_name2);
                 network2.* = try networks.EthLibp2p.init(allocator, loop, .{
@@ -301,7 +323,6 @@ pub fn main() !void {
                     .listen_addresses = listen_addresses2,
                     .connect_peers = connect_peers,
                 }, logger2_config.logger(.network));
-                try network2.run();
                 backend2 = network2.getNetworkInterface();
                 logger1_config.logger(null).debug("--- ethlibp2p gossip {any}", .{backend1.gossip});
             }
@@ -309,34 +330,54 @@ pub fn main() !void {
             var clock = try allocator.create(Clock);
             clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop, params.activePreset);
 
+            //one missing validator is by design
             var validator_ids_1 = [_]usize{1};
             var validator_ids_2 = [_]usize{2};
 
-            var beam_node_1 = try BeamNode.init(allocator, .{
+            const data_dir_1 = try std.fmt.allocPrint(allocator, "{s}/node1", .{beamcmd.data_dir});
+            defer allocator.free(data_dir_1);
+            const data_dir_2 = try std.fmt.allocPrint(allocator, "{s}/node2", .{beamcmd.data_dir});
+            defer allocator.free(data_dir_2);
+
+            var db_1 = try database.Db.open(allocator, logger1_config.logger(.database), data_dir_1);
+            defer db_1.deinit();
+            var db_2 = try database.Db.open(allocator, logger2_config.logger(.database), data_dir_2);
+            defer db_2.deinit();
+
+            var beam_node_1: BeamNode = undefined;
+            try beam_node_1.init(allocator, .{
                 // options
                 .nodeId = 0,
                 .config = chain_config,
                 .anchorState = &anchorState,
                 .backend = backend1,
                 .clock = clock,
-                .db = .{},
                 .validator_ids = &validator_ids_1,
+                .db = db_1,
                 .logger_config = &logger1_config,
             });
-            var beam_node_2 = try BeamNode.init(allocator, .{
+
+            var beam_node_2: BeamNode = undefined;
+            try beam_node_2.init(allocator, .{
                 // options
                 .nodeId = 1,
                 .config = chain_config,
                 .anchorState = &anchorState,
                 .backend = backend2,
                 .clock = clock,
-                .db = .{},
                 .validator_ids = &validator_ids_2,
+                .db = db_2,
                 .logger_config = &logger2_config,
             });
 
             try beam_node_1.run();
             try beam_node_2.run();
+
+            if (!mock_network) {
+                try network1.run();
+                try network2.run();
+            }
+
             try clock.run();
         },
         .prometheus => |prometheus| switch (prometheus.__commands__) {
@@ -349,10 +390,14 @@ pub fn main() !void {
             },
         },
         .node => |leancmd| {
-            var zeam_logger_config = utils_lib.getLoggerConfig(console_log_level, utils_lib.FileBehaviourParams{ .fileActiveLevel = log_file_active_level, .filePath = log_filepath, .fileName = log_filename });
+            try std.fs.cwd().makePath(leancmd.@"data-dir");
+            var zeam_logger_config = utils_lib.getLoggerConfig(console_log_level, utils_lib.FileBehaviourParams{ .fileActiveLevel = log_file_active_level, .filePath = leancmd.@"data-dir", .fileName = log_filename });
 
             var start_options: node.NodeOptions = .{
-                .node_id = leancmd.node_id,
+                .network_id = leancmd.network_id,
+                .node_key = leancmd.@"node-id",
+                .validator_config = leancmd.validator_config,
+                .node_key_index = undefined,
                 .metrics_enable = leancmd.metrics_enable,
                 .metrics_port = leancmd.metrics_port,
                 .bootnodes = undefined,
@@ -361,6 +406,7 @@ pub fn main() !void {
                 .local_priv_key = undefined,
                 .logger_config = &zeam_logger_config,
                 .preset = params.activePreset,
+                .database_path = leancmd.@"data-dir",
             };
 
             defer start_options.deinit(allocator);

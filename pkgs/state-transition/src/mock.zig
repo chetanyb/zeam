@@ -2,13 +2,11 @@ const ssz = @import("ssz");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const types = @import("@zeam/types");
-
-pub const utils = @import("./utils.zig");
-const transition = @import("./transition.zig");
 const params = @import("@zeam/params");
-
+const types = @import("@zeam/types");
 const zeam_utils = @import("@zeam/utils");
+
+const transition = @import("./transition.zig");
 
 const MockChainData = struct {
     genesis_config: types.GenesisSpec,
@@ -22,6 +20,20 @@ const MockChainData = struct {
     // did justification/finalization happen
     justification: []bool,
     finalization: []bool,
+
+    pub fn deinit(self: *MockChainData, allocator: Allocator) void {
+        self.genesis_state.deinit(allocator);
+        for (self.blocks) |*b| {
+            b.deinit(allocator);
+        }
+        allocator.free(self.blocks);
+        allocator.free(self.blockRoots);
+        allocator.free(self.latestJustified);
+        allocator.free(self.latestFinalized);
+        allocator.free(self.latestHead);
+        allocator.free(self.justification);
+        allocator.free(self.finalization);
+    }
 };
 
 pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types.GenesisSpec) !MockChainData {
@@ -30,7 +42,9 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
         .num_validators = 4,
     };
 
-    const genesis_state = try utils.genGenesisState(allocator, genesis_config);
+    var genesis_state: types.BeamState = undefined;
+    try genesis_state.genGenesisState(allocator, genesis_config);
+    errdefer genesis_state.deinit();
     var blockList = std.ArrayList(types.SignedBeamBlock).init(allocator);
     var blockRootList = std.ArrayList(types.Root).init(allocator);
 
@@ -43,12 +57,16 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
     var headList = std.ArrayList(types.Mini3SFCheckpoint).init(allocator);
 
     // figure out a way to clone genesis_state
-    var beam_state = try utils.genGenesisState(allocator, genesis_config);
-    const genesis_block = try utils.genGenesisBlock(allocator, beam_state);
+    var beam_state: types.BeamState = undefined;
+    try beam_state.genGenesisState(allocator, genesis_config);
+    defer beam_state.deinit();
+
+    var genesis_block: types.BeamBlock = undefined;
+    try beam_state.genGenesisBlock(allocator, &genesis_block);
 
     const gen_signed_block = types.SignedBeamBlock{
         .message = genesis_block,
-        .signature = utils.ZERO_HASH_4000,
+        .signature = types.ZERO_HASH_4000,
     };
     var block_root: types.Root = undefined;
     try ssz.hashTreeRoot(types.BeamBlock, genesis_block, &block_root, allocator);
@@ -83,7 +101,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
         var parent_root: [32]u8 = undefined;
         try ssz.hashTreeRoot(types.BeamBlock, prev_block, &parent_root, allocator);
 
-        const state_root: [32]u8 = utils.ZERO_HASH;
+        const state_root: [32]u8 = types.ZERO_HASH;
         // const timestamp = genesis_config.genesis_time + slot * params.SECONDS_PER_SLOT;
         var votes = std.ArrayList(types.SignedVote).init(allocator);
         // 4 slot moving scenario can be applied over and over with finalization in 0
@@ -249,7 +267,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
         // generate the signed beam block and add to block list
         const signed_block = types.SignedBeamBlock{
             .message = block,
-            .signature = utils.ZERO_HASH_4000,
+            .signature = types.ZERO_HASH_4000,
         };
         try blockList.append(signed_block);
         try blockRootList.append(block_root);

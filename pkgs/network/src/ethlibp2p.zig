@@ -1,4 +1,5 @@
 const std = @import("std");
+const json = std.json;
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 
@@ -7,9 +8,11 @@ const types = @import("@zeam/types");
 const xev = @import("xev");
 const Multiaddr = @import("multiformats").multiaddr.Multiaddr;
 const zeam_utils = @import("@zeam/utils");
+const jsonToString = zeam_utils.jsonToString;
 
 const interface = @import("./interface.zig");
 const NetworkInterface = interface.NetworkInterface;
+const snappyz = @import("snappyz");
 
 /// Writes failed deserialization bytes to disk for debugging purposes
 /// Returns the filename if the file was successfully created, null otherwise
@@ -55,12 +58,23 @@ export fn handleMsgFromRustBridge(zigHandler: *EthLibp2p, topic_str: [*:0]const 
     };
 
     const message_bytes: []const u8 = message_ptr[0..message_len];
+
+    const uncompressed_message = snappyz.decode(zigHandler.allocator, message_bytes) catch |e| {
+        zigHandler.logger.err("Error in snappyz decoding the message for topic={s}: {any}", .{ std.mem.span(topic_str), e });
+        if (writeFailedBytes(message_bytes, "snappyz_decode", zigHandler.allocator, null, zigHandler.logger)) |filename| {
+            zigHandler.logger.err("Snappyz decode failed - debug file created: {s}", .{filename});
+        } else {
+            zigHandler.logger.err("Snappyz decode failed - could not create debug file", .{});
+        }
+        return;
+    };
+    defer zigHandler.allocator.free(uncompressed_message);
     const message: interface.GossipMessage = switch (topic.gossip_topic) {
         .block => blockmessage: {
             var message_data: types.SignedBeamBlock = undefined;
-            ssz.deserialize(types.SignedBeamBlock, message_bytes, &message_data, zigHandler.allocator) catch |e| {
+            ssz.deserialize(types.SignedBeamBlock, uncompressed_message, &message_data, zigHandler.allocator) catch |e| {
                 zigHandler.logger.err("Error in deserializing the signed block message: {any}", .{e});
-                if (writeFailedBytes(message_bytes, "block", zigHandler.allocator, null, zigHandler.logger)) |filename| {
+                if (writeFailedBytes(uncompressed_message, "block", zigHandler.allocator, null, zigHandler.logger)) |filename| {
                     zigHandler.logger.err("Block deserialization failed - debug file created: {s}", .{filename});
                 } else {
                     zigHandler.logger.err("Block deserialization failed - could not create debug file", .{});
@@ -72,9 +86,9 @@ export fn handleMsgFromRustBridge(zigHandler: *EthLibp2p, topic_str: [*:0]const 
         },
         .vote => votemessage: {
             var message_data: types.SignedVote = undefined;
-            ssz.deserialize(types.SignedVote, message_bytes, &message_data, zigHandler.allocator) catch |e| {
+            ssz.deserialize(types.SignedVote, uncompressed_message, &message_data, zigHandler.allocator) catch |e| {
                 zigHandler.logger.err("Error in deserializing the signed vote message: {any}", .{e});
-                if (writeFailedBytes(message_bytes, "vote", zigHandler.allocator, null, zigHandler.logger)) |filename| {
+                if (writeFailedBytes(uncompressed_message, "vote", zigHandler.allocator, null, zigHandler.logger)) |filename| {
                     zigHandler.logger.err("Vote deserialization failed - debug file created: {s}", .{filename});
                 } else {
                     zigHandler.logger.err("Vote deserialization failed - could not create debug file", .{});
@@ -85,11 +99,35 @@ export fn handleMsgFromRustBridge(zigHandler: *EthLibp2p, topic_str: [*:0]const 
         },
     };
 
-    zigHandler.logger.debug("\network-{d}:: !!!handleMsgFromRustBridge topic={s}:: message={any} from bytes={any} \n", .{ zigHandler.params.networkId, std.mem.span(topic_str), message, message_bytes });
+    const message_str = message.toJsonString(zigHandler.allocator) catch |e| {
+        zigHandler.logger.err("Failed to convert message to JSON string: {any}", .{e});
+        return;
+    };
+    defer zigHandler.allocator.free(message_str);
+
+    zigHandler.logger.debug("\network-{d}:: !!!handleMsgFromRustBridge topic={s}:: message={s} from bytes={any} \n", .{ zigHandler.params.networkId, std.mem.span(topic_str), message_str, message_bytes });
 
     // TODO: figure out why scheduling on the loop is not working
     zigHandler.gossipHandler.onGossip(&message, false) catch |e| {
         zigHandler.logger.err("onGossip handling of message failed with error e={any}", .{e});
+    };
+}
+
+export fn handlePeerConnectedFromRustBridge(zigHandler: *EthLibp2p, peer_id: [*:0]const u8) void {
+    const peer_id_slice = std.mem.span(peer_id);
+    zigHandler.logger.info("network-{d}:: Peer connected: {s}", .{ zigHandler.params.networkId, peer_id_slice });
+
+    zigHandler.peerEventHandler.onPeerConnected(peer_id_slice) catch |e| {
+        zigHandler.logger.err("network-{d}:: Error handling peer connected event: {any}", .{ zigHandler.params.networkId, e });
+    };
+}
+
+export fn handlePeerDisconnectedFromRustBridge(zigHandler: *EthLibp2p, peer_id: [*:0]const u8) void {
+    const peer_id_slice = std.mem.span(peer_id);
+    zigHandler.logger.info("network-{d}:: Peer disconnected: {s}", .{ zigHandler.params.networkId, peer_id_slice });
+
+    zigHandler.peerEventHandler.onPeerDisconnected(peer_id_slice) catch |e| {
+        zigHandler.logger.err("network-{d}:: Error handling peer disconnected event: {any}", .{ zigHandler.params.networkId, e });
     };
 }
 
@@ -121,6 +159,7 @@ pub const EthLibp2pParams = struct {
 pub const EthLibp2p = struct {
     allocator: Allocator,
     gossipHandler: interface.GenericGossipHandler,
+    peerEventHandler: interface.PeerEventHandler,
     params: EthLibp2pParams,
     rustBridgeThread: ?Thread = null,
     logger: zeam_utils.ModuleLogger,
@@ -133,11 +172,33 @@ pub const EthLibp2p = struct {
         params: EthLibp2pParams,
         logger: zeam_utils.ModuleLogger,
     ) !Self {
-        return Self{ .allocator = allocator, .params = params, .gossipHandler = try interface.GenericGossipHandler.init(allocator, loop, params.networkId, logger), .logger = logger };
+        const owned_network_name = try allocator.dupe(u8, params.network_name);
+        errdefer allocator.free(owned_network_name);
+
+        const gossip_handler = try interface.GenericGossipHandler.init(allocator, loop, params.networkId, logger);
+        errdefer gossip_handler.deinit();
+
+        const peer_event_handler = try interface.PeerEventHandler.init(allocator, params.networkId, logger);
+        errdefer peer_event_handler.deinit();
+
+        return Self{
+            .allocator = allocator,
+            .params = .{
+                .networkId = params.networkId,
+                .network_name = owned_network_name,
+                .local_private_key = params.local_private_key,
+                .listen_addresses = params.listen_addresses,
+                .connect_peers = params.connect_peers,
+            },
+            .gossipHandler = gossip_handler,
+            .peerEventHandler = peer_event_handler,
+            .logger = logger,
+        };
     }
 
     pub fn deinit(self: *Self) void {
         self.gossipHandler.deinit();
+        self.peerEventHandler.deinit();
 
         for (self.params.listen_addresses) |addr| addr.deinit();
         self.allocator.free(self.params.listen_addresses);
@@ -170,7 +231,7 @@ pub const EthLibp2p = struct {
             var topic = try interface.LeanNetworkTopic.init(self.allocator, gossip_topic, .ssz_snappy, self.params.network_name);
             defer topic.deinit();
             const topic_str = try topic.encode();
-            try topics_list.append(self.allocator, std.mem.span(topic_str.ptr));
+            try topics_list.append(self.allocator, topic_str);
         }
         const topics_str = try std.mem.joinZ(self.allocator, ",", topics_list.items);
 
@@ -182,26 +243,32 @@ pub const EthLibp2p = struct {
         // publish
         var topic = try data.getLeanNetworkTopic(self.allocator, self.params.network_name);
         defer topic.deinit();
-        const topic_str = try topic.encode();
+        const topic_str = try topic.encodeZ();
         defer self.allocator.free(topic_str);
 
         // TODO: deinit the message later ob once done
         const message = switch (topic.gossip_topic) {
             .block => blockbytes: {
                 var serialized = std.ArrayList(u8).init(self.allocator);
+                defer serialized.deinit();
                 try ssz.serialize(types.SignedBeamBlock, data.block, &serialized);
 
-                break :blockbytes serialized.items;
+                break :blockbytes try serialized.toOwnedSlice();
             },
             .vote => votebytes: {
                 var serialized = std.ArrayList(u8).init(self.allocator);
+                defer serialized.deinit();
                 try ssz.serialize(types.SignedVote, data.vote, &serialized);
 
-                break :votebytes serialized.items;
+                break :votebytes try serialized.toOwnedSlice();
             },
         };
-        self.logger.debug("network-{d}:: calling publish_msg_to_rust_bridge with message={any} for data={any}", .{ self.params.networkId, message, data });
-        publish_msg_to_rust_bridge(self.params.networkId, topic_str.ptr, message.ptr, message.len);
+        defer self.allocator.free(message);
+
+        const compressed_message = try snappyz.encode(self.allocator, message);
+        defer self.allocator.free(compressed_message);
+        self.logger.debug("network-{d}:: calling publish_msg_to_rust_bridge with message={any} for data={any}", .{ self.params.networkId, compressed_message, data });
+        publish_msg_to_rust_bridge(self.params.networkId, topic_str.ptr, compressed_message.ptr, compressed_message.len);
     }
 
     pub fn subscribe(ptr: *anyopaque, topics: []interface.GossipTopic, handler: interface.OnGossipCbHandler) anyerror!void {
@@ -224,17 +291,29 @@ pub const EthLibp2p = struct {
         _ = data;
     }
 
+    pub fn subscribePeerEvents(ptr: *anyopaque, handler: interface.OnPeerEventCbHandler) anyerror!void {
+        const self: *Self = @ptrCast(@alignCast(ptr));
+        return self.peerEventHandler.subscribe(handler);
+    }
+
     pub fn getNetworkInterface(self: *Self) NetworkInterface {
-        return .{ .gossip = .{
-            .ptr = self,
-            .publishFn = publish,
-            .subscribeFn = subscribe,
-            .onGossipFn = onGossip,
-        }, .reqresp = .{
-            .ptr = self,
-            .reqRespFn = reqResp,
-            .onReqFn = onReq,
-        } };
+        return .{
+            .gossip = .{
+                .ptr = self,
+                .publishFn = publish,
+                .subscribeFn = subscribe,
+                .onGossipFn = onGossip,
+            },
+            .reqresp = .{
+                .ptr = self,
+                .reqRespFn = reqResp,
+                .onReqFn = onReq,
+            },
+            .peers = .{
+                .ptr = self,
+                .subscribeFn = subscribePeerEvents,
+            },
+        };
     }
 
     fn multiaddrsToString(allocator: Allocator, addrs: []const Multiaddr) ![:0]u8 {
