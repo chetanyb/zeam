@@ -28,7 +28,6 @@ pub const Clock = struct {
         allocator: Allocator,
         genesis_time: usize,
         loop: *xev.Loop,
-        _: params.Preset,
     ) !Self {
         const events = try utils.EventLoop.init(loop);
         const timer = try xev.Timer.init();

@@ -183,7 +183,7 @@ pub fn main() !void {
     switch (opts.args.__commands__) {
         .clock => {
             var loop = try xev.Loop.init(.{});
-            var clock = try Clock.init(gpa.allocator(), genesis, &loop, params.activePreset);
+            var clock = try Clock.init(gpa.allocator(), genesis, &loop);
             std.debug.print("clock {any}\n", .{clock});
 
             try clock.run();
@@ -328,7 +328,7 @@ pub fn main() !void {
             }
 
             var clock = try allocator.create(Clock);
-            clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop, params.activePreset);
+            clock.* = try Clock.init(allocator, chain_config.genesis.genesis_time, loop);
 
             //one missing validator is by design
             var validator_ids_1 = [_]usize{1};

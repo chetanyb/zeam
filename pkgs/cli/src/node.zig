@@ -134,7 +134,7 @@ pub const Node = struct {
             .local_private_key = options.local_priv_key,
         }, options.logger_config.logger(.network));
         errdefer self.network.deinit();
-        self.clock = try Clock.init(allocator, chain_config.genesis.genesis_time, &self.loop, options.preset);
+        self.clock = try Clock.init(allocator, chain_config.genesis.genesis_time, &self.loop);
         errdefer self.clock.deinit(allocator);
 
         var db = try database.Db.open(allocator, options.logger_config.logger(.database), options.database_path);
