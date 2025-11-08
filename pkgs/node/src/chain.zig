@@ -377,7 +377,7 @@ pub const BeamChain = struct {
 
             // 2. apply STF to get post state
             var validSignatures = true;
-            stf.verify_signatures(signedBlock) catch {
+            stf.verifySignatures(self.allocator, pre_state, &signedBlock) catch {
                 validSignatures = false;
             };
             try stf.apply_transition(self.allocator, cpost_state, block, .{
