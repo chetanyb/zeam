@@ -17,10 +17,8 @@ pub const ValidatorIndex = u64;
 pub const Bytes48 = [48]u8;
 pub const Bytes52 = [52]u8;
 
-// Signature size for XMSS PROD_CONFIG
-pub const SIGSIZE = 3100;
-pub const Bytes4000 = [SIGSIZE]u8; // TODO: update all the uses appropriately, kept for compatibility for now
-pub const Bytes3100 = [SIGSIZE]u8;
+pub const SIGSIZE = 4000;
+pub const Bytes4000 = [SIGSIZE]u8;
 
 pub const Root = Bytes32;
 // zig treats string as byte sequence so hex is 64 bytes string

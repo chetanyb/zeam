@@ -22,7 +22,7 @@ pub const Validator = struct {
     }
 
     pub fn getPubkey(self: *const Validator) []const u8 {
-        self.pubkey;
+        return &self.pubkey;
     }
 
     pub fn toJsonString(self: *const Validator, allocator: Allocator) ![]const u8 {

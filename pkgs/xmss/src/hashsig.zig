@@ -40,7 +40,45 @@ extern fn hashsig_verify(
 /// Get the message length constant
 extern fn hashsig_message_length() usize;
 
+/// Verify XMSS signature from bincode-serialized bytes
+extern fn hashsig_verify_bincode(
+    pubkey_bytes: [*]const u8,
+    pubkey_len: usize,
+    message: [*]const u8,
+    epoch: u32,
+    signature_bytes: [*]const u8,
+    signature_len: usize,
+) i32;
+
 pub const HashSigError = error{ KeyGenerationFailed, SigningFailed, VerificationFailed, InvalidSignature, SerializationFailed, InvalidMessageLength, OutOfMemory };
+
+/// Verify signature using bincode-serialized bytes
+pub fn verifyBincode(
+    pubkey_bytes: []const u8,
+    message: []const u8,
+    epoch: u32,
+    signature_bytes: []const u8,
+) HashSigError!void {
+    if (message.len != 32) {
+        return HashSigError.InvalidMessageLength;
+    }
+
+    const result = hashsig_verify_bincode(
+        pubkey_bytes.ptr,
+        pubkey_bytes.len,
+        message.ptr,
+        epoch,
+        signature_bytes.ptr,
+        signature_bytes.len,
+    );
+
+    switch (result) {
+        1 => {},
+        0 => return HashSigError.VerificationFailed,
+        -1 => return HashSigError.InvalidSignature,
+        else => return HashSigError.VerificationFailed,
+    }
+}
 
 /// Wrapper for the hash signature key pair
 pub const KeyPair = struct {

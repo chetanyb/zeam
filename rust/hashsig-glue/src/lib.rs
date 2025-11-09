@@ -8,9 +8,9 @@ use std::os::raw::c_char;
 use std::ptr;
 use std::slice;
 
-use hashsig::signature::generalized_xmss::instantiations_poseidon::lifetime_2_to_the_18::winternitz::SIGWinternitzLifetime18W4;
+use hashsig::signature::generalized_xmss::instantiations_poseidon_top_level::lifetime_2_to_the_32::hashing_optimized::SIGTopLevelTargetSumLifetime32Dim64Base8;
 
-pub type HashSigScheme = SIGWinternitzLifetime18W4;
+pub type HashSigScheme = SIGTopLevelTargetSumLifetime32Dim64Base8;
 pub type HashSigPrivateKey = <HashSigScheme as SignatureScheme>::SecretKey;
 pub type HashSigPublicKey = <HashSigScheme as SignatureScheme>::PublicKey;
 pub type HashSigSignature = <HashSigScheme as SignatureScheme>::Signature;
@@ -232,3 +232,56 @@ pub unsafe extern "C" fn hashsig_verify(
 pub extern "C" fn hashsig_message_length() -> usize {
     MESSAGE_LENGTH
 }
+
+use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
+
+const BINCODE_CONFIG: Configuration<LittleEndian, Fixint, NoLimit> =
+    bincode::config::standard().with_fixed_int_encoding();
+
+/// Verify XMSS signature from bincode-serialized bytes
+/// Returns 1 if valid, 0 if invalid, -1 on error
+/// # Safety
+/// All pointers must be valid and point to correctly sized data
+#[no_mangle]
+pub unsafe extern "C" fn hashsig_verify_bincode(
+    pubkey_bytes: *const u8,
+    pubkey_len: usize,
+    message: *const u8,
+    epoch: u32,
+    signature_bytes: *const u8,
+    signature_len: usize,
+) -> i32 {
+    if pubkey_bytes.is_null() || message.is_null() || signature_bytes.is_null() {
+        return -1;
+    }
+
+    unsafe {
+        let pk_data = slice::from_raw_parts(pubkey_bytes, pubkey_len);
+        let sig_data = slice::from_raw_parts(signature_bytes, signature_len);
+        let msg_data = slice::from_raw_parts(message, MESSAGE_LENGTH);
+
+        let message_array: &[u8; MESSAGE_LENGTH] = match msg_data.try_into() {
+            Ok(arr) => arr,
+            Err(_) => return -1,
+        };
+
+        let pk: HashSigPublicKey = match bincode::serde::decode_from_slice(pk_data, BINCODE_CONFIG) {
+            Ok((pk, _)) => pk,
+            Err(_) => return -1,
+        };
+
+        let sig: HashSigSignature = match bincode::serde::decode_from_slice(sig_data, BINCODE_CONFIG) {
+            Ok((sig, _)) => sig,
+            Err(_) => return -1,
+        };
+
+        let is_valid = <HashSigScheme as SignatureScheme>::verify(&pk, epoch, message_array, &sig);
+
+        if is_valid {
+            1
+        } else {
+            0
+        }
+    }
+}
+

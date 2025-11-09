@@ -207,6 +207,8 @@ pub const SignedBlockWithAttestation = struct {
 };
 
 // Creates a BlockSignatures list with zero signatures for all attestations plus the proposer attestation
+// TODO(XMSS): Generate real XMSS signatures for test blocks
+// Currently using zero bytes - tests handle verification failure gracefully via catch in chain.zig
 pub fn createBlockSignatures(allocator: Allocator, num_attestations: usize) !BlockSignatures {
     var signatures = try BlockSignatures.init(allocator);
     // +1 for proposer attestation
