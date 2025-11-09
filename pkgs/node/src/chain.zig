@@ -375,7 +375,7 @@ pub const BeamChain = struct {
             const cpost_state = try self.allocator.create(types.BeamState);
             try types.sszClone(self.allocator, types.BeamState, pre_state.*, cpost_state);
 
-            // 2. apply STF to get post state
+            // 2. verify XMSS signatures before state transition
             var validSignatures = true;
             stf.verifySignatures(self.allocator, pre_state, &signedBlock) catch {
                 validSignatures = false;

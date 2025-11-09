@@ -188,6 +188,16 @@ pub fn build(b: *Builder) !void {
         .root_source_file = b.path("pkgs/xmss/src/hashsig.zig"),
     });
 
+    // add zeam-testing (test infrastructure for XMSS signatures)
+    const zeam_testing = b.addModule("@zeam/testing", .{
+        .root_source_file = b.path("pkgs/testing/signature_helpers.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zeam_testing.addImport("@zeam/xmss", zeam_xmss);
+    zeam_testing.addImport("@zeam/types", zeam_types);
+    zeam_testing.addImport("ssz", ssz);
+
     // add zeam-state-transition
     const zeam_state_transition = b.addModule("@zeam/state-transition", .{
         .root_source_file = b.path("pkgs/state-transition/src/lib.zig"),
@@ -200,6 +210,7 @@ pub fn build(b: *Builder) !void {
     zeam_state_transition.addImport("ssz", ssz);
     zeam_state_transition.addImport("@zeam/api", zeam_api);
     zeam_state_transition.addImport("@zeam/xmss", zeam_xmss);
+    zeam_state_transition.addImport("@zeam/testing", zeam_testing);
 
     // add state proving manager
     const zeam_state_proving_manager = b.addModule("@zeam/state-proving-manager", .{

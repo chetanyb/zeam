@@ -40,6 +40,20 @@ extern fn hashsig_verify(
 /// Get the message length constant
 extern fn hashsig_message_length() usize;
 
+/// Serialize a signature to bytes using bincode
+extern fn hashsig_signature_to_bytes(
+    signature: *const HashSigSignature,
+    buffer: [*]u8,
+    buffer_len: usize,
+) usize;
+
+/// Serialize a public key to bytes using bincode
+extern fn hashsig_pubkey_to_bytes(
+    keypair: *const HashSigKeyPair,
+    buffer: [*]u8,
+    buffer_len: usize,
+) usize;
+
 /// Verify XMSS signature from bincode-serialized bytes
 extern fn hashsig_verify_bincode(
     pubkey_bytes: [*]const u8,
@@ -164,6 +178,21 @@ pub const KeyPair = struct {
         return hashsig_message_length();
     }
 
+    /// Serialize public key to bytes (bincode format)
+    pub fn pubkeyToBytes(self: *const Self, buffer: []u8) HashSigError!usize {
+        const bytes_written = hashsig_pubkey_to_bytes(
+            self.handle,
+            buffer.ptr,
+            buffer.len,
+        );
+
+        if (bytes_written == 0) {
+            return HashSigError.SerializationFailed;
+        }
+
+        return bytes_written;
+    }
+
     /// Free the key pair
     pub fn deinit(self: *Self) void {
         hashsig_keypair_free(self.handle);
@@ -175,6 +204,22 @@ pub const Signature = struct {
     handle: *HashSigSignature,
 
     const Self = @This();
+
+    /// Serialize signature to bytes (bincode format)
+    /// Returns the number of bytes written to the buffer
+    pub fn toBytes(self: *const Self, buffer: []u8) HashSigError!usize {
+        const bytes_written = hashsig_signature_to_bytes(
+            self.handle,
+            buffer.ptr,
+            buffer.len,
+        );
+
+        if (bytes_written == 0) {
+            return HashSigError.SerializationFailed;
+        }
+
+        return bytes_written;
+    }
 
     /// Free the signature
     pub fn deinit(self: *Self) void {
@@ -242,4 +287,38 @@ test "HashSig: invalid message length" {
     // Should fail with invalid message length
     const result = keypair.sign(wrong_message, epoch);
     try std.testing.expectError(HashSigError.InvalidMessageLength, result);
+}
+
+test "HashSig: bincode serialize and verify" {
+    const allocator = std.testing.allocator;
+
+    var keypair = try KeyPair.generate(allocator, "test_seed", 0, 10);
+    defer keypair.deinit();
+
+    const message = [_]u8{1} ** 32;
+    const epoch: u32 = 0;
+
+    // Sign
+    var signature = try keypair.sign(&message, epoch);
+    defer signature.deinit();
+
+    // Serialize signature
+    var sig_buffer: [4000]u8 = undefined;
+    const sig_size = try signature.toBytes(&sig_buffer);
+    std.debug.print("\nSignature size: {d} bytes\n", .{sig_size});
+
+    // Serialize public key
+    var pubkey_buffer: [256]u8 = undefined;
+    const pubkey_size = try keypair.pubkeyToBytes(&pubkey_buffer);
+    std.debug.print("Public key size: {d} bytes\n", .{pubkey_size});
+
+    // Verify using bincode
+    try verifyBincode(
+        pubkey_buffer[0..pubkey_size],
+        &message,
+        epoch,
+        &sig_buffer,
+    );
+
+    std.debug.print("Verification succeeded!\n", .{});
 }

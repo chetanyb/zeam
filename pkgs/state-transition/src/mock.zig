@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const params = @import("@zeam/params");
 const types = @import("@zeam/types");
 const zeam_utils = @import("@zeam/utils");
+const testing = @import("@zeam/testing");
 
 const transition = @import("./transition.zig");
 
@@ -45,6 +46,26 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
     var genesis_state: types.BeamState = undefined;
     try genesis_state.genGenesisState(allocator, genesis_config);
     errdefer genesis_state.deinit();
+
+    var key_manager = try testing.TestKeyManager.init(
+        allocator,
+        genesis_config.num_validators,
+        numBlocks,
+    );
+    defer key_manager.deinit();
+
+    for (0..genesis_config.num_validators) |i| {
+        var validator_pubkey: types.Bytes52 = undefined;
+        const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
+        if (pubkey_size < validator_pubkey.len) {
+            @memset(validator_pubkey[pubkey_size..], 0);
+        }
+
+        const validator = types.Validator{
+            .pubkey = validator_pubkey,
+        };
+        try genesis_state.validators.append(validator);
+    }
     var blockList = std.ArrayList(types.SignedBlockWithAttestation).init(allocator);
     var blockRootList = std.ArrayList(types.Root).init(allocator);
 
@@ -60,6 +81,20 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
     var beam_state: types.BeamState = undefined;
     try beam_state.genGenesisState(allocator, genesis_config);
     defer beam_state.deinit();
+
+    // Add validators to beam_state to match genesis_state
+    for (0..genesis_config.num_validators) |i| {
+        var validator_pubkey: types.Bytes52 = undefined;
+        const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
+        if (pubkey_size < validator_pubkey.len) {
+            @memset(validator_pubkey[pubkey_size..], 0);
+        }
+
+        const validator = types.Validator{
+            .pubkey = validator_pubkey,
+        };
+        try beam_state.validators.append(validator);
+    }
 
     var genesis_block: types.BeamBlock = undefined;
     try beam_state.genGenesisBlock(allocator, &genesis_block);
@@ -79,7 +114,15 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
     const gen_signed_block = types.SignedBlockWithAttestation{
         .message = gen_block_with_attestation,
-        .signature = try types.createBlockSignatures(allocator, genesis_block.body.attestations.len()),
+        .signature = blk: {
+            var sigs = try types.BlockSignatures.init(allocator);
+            const proposer_sig = try key_manager.signAttestation(
+                &gen_block_with_attestation.proposer_attestation,
+                allocator,
+            );
+            try sigs.append(proposer_sig);
+            break :blk sigs;
+        },
     };
     var block_root: types.Root = undefined;
     try ssz.hashTreeRoot(types.BeamBlock, genesis_block, &block_root, allocator);
@@ -288,7 +331,22 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
         const signed_block = types.SignedBlockWithAttestation{
             .message = block_with_attestation,
-            .signature = try types.createBlockSignatures(allocator, attestations.items.len),
+            .signature = blk: {
+                var sigs = try types.BlockSignatures.init(allocator);
+
+                for (block.body.attestations.constSlice()) |attestation| {
+                    const sig = try key_manager.signAttestation(&attestation, allocator);
+                    try sigs.append(sig);
+                }
+
+                const proposer_sig = try key_manager.signAttestation(
+                    &block_with_attestation.proposer_attestation,
+                    allocator,
+                );
+                try sigs.append(proposer_sig);
+
+                break :blk sigs;
+            },
         };
         try blockList.append(signed_block);
         try blockRootList.append(block_root);

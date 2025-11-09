@@ -238,6 +238,56 @@ use bincode::config::{Configuration, Fixint, LittleEndian, NoLimit};
 const BINCODE_CONFIG: Configuration<LittleEndian, Fixint, NoLimit> =
     bincode::config::standard().with_fixed_int_encoding();
 
+/// Serialize a signature to bytes using bincode
+/// Returns number of bytes written, or 0 on error
+/// # Safety
+/// buffer must point to a valid buffer of sufficient size (recommend 4000+ bytes)
+#[no_mangle]
+pub unsafe extern "C" fn hashsig_signature_to_bytes(
+    signature: *const Signature,
+    buffer: *mut u8,
+    buffer_len: usize,
+) -> usize {
+    if signature.is_null() || buffer.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let sig_ref = &*signature;
+        let output_slice = slice::from_raw_parts_mut(buffer, buffer_len);
+
+        match bincode::serde::encode_into_slice(&sig_ref.inner, output_slice, BINCODE_CONFIG) {
+            Ok(bytes_written) => bytes_written,
+            Err(_) => 0,
+        }
+    }
+}
+
+/// Serialize a public key to bytes using bincode
+/// Returns number of bytes written, or 0 on error
+/// # Safety
+/// buffer must point to a valid buffer of sufficient size
+#[no_mangle]
+pub unsafe extern "C" fn hashsig_pubkey_to_bytes(
+    keypair: *const KeyPair,
+    buffer: *mut u8,
+    buffer_len: usize,
+) -> usize {
+    if keypair.is_null() || buffer.is_null() {
+        return 0;
+    }
+
+    unsafe {
+        let keypair_ref = &*keypair;
+        let output_slice = slice::from_raw_parts_mut(buffer, buffer_len);
+
+        match bincode::serde::encode_into_slice(&keypair_ref.public_key.inner, output_slice, BINCODE_CONFIG) {
+            Ok(bytes_written) => bytes_written,
+            Err(_) => 0,
+        }
+    }
+}
+
 /// Verify XMSS signature from bincode-serialized bytes
 /// Returns 1 if valid, 0 if invalid, -1 on error
 /// # Safety
@@ -285,3 +335,7 @@ pub unsafe extern "C" fn hashsig_verify_bincode(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+}
