@@ -243,8 +243,11 @@ jobs:
 
   docker-build:
     name: docker-build
-    runs-on: ubuntu-latest
     needs: [lint, build, test, build-all-provers]
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    runs-on: [ ubuntu-latest, matrix.arch ]
     steps:
     - uses: actions/checkout@v4
       with:
