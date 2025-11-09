@@ -206,6 +206,7 @@ pub const SignedBlockWithAttestation = struct {
     }
 };
 
+// Creates a BlockSignatures list with zero signatures for all attestations plus the proposer attestation
 pub fn createBlockSignatures(allocator: Allocator, num_attestations: usize) !BlockSignatures {
     var signatures = try BlockSignatures.init(allocator);
     // +1 for proposer attestation

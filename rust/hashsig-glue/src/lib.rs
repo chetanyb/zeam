@@ -256,10 +256,8 @@ pub unsafe extern "C" fn hashsig_signature_to_bytes(
         let sig_ref = &*signature;
         let output_slice = slice::from_raw_parts_mut(buffer, buffer_len);
 
-        match bincode::serde::encode_into_slice(&sig_ref.inner, output_slice, BINCODE_CONFIG) {
-            Ok(bytes_written) => bytes_written,
-            Err(_) => 0,
-        }
+        bincode::serde::encode_into_slice(&sig_ref.inner, output_slice, BINCODE_CONFIG)
+            .unwrap_or_default()
     }
 }
 
@@ -281,10 +279,12 @@ pub unsafe extern "C" fn hashsig_pubkey_to_bytes(
         let keypair_ref = &*keypair;
         let output_slice = slice::from_raw_parts_mut(buffer, buffer_len);
 
-        match bincode::serde::encode_into_slice(&keypair_ref.public_key.inner, output_slice, BINCODE_CONFIG) {
-            Ok(bytes_written) => bytes_written,
-            Err(_) => 0,
-        }
+        bincode::serde::encode_into_slice(
+            &keypair_ref.public_key.inner,
+            output_slice,
+            BINCODE_CONFIG,
+        )
+        .unwrap_or_default()
     }
 }
 
@@ -315,15 +315,17 @@ pub unsafe extern "C" fn hashsig_verify_bincode(
             Err(_) => return -1,
         };
 
-        let pk: HashSigPublicKey = match bincode::serde::decode_from_slice(pk_data, BINCODE_CONFIG) {
+        let pk: HashSigPublicKey = match bincode::serde::decode_from_slice(pk_data, BINCODE_CONFIG)
+        {
             Ok((pk, _)) => pk,
             Err(_) => return -1,
         };
 
-        let sig: HashSigSignature = match bincode::serde::decode_from_slice(sig_data, BINCODE_CONFIG) {
-            Ok((sig, _)) => sig,
-            Err(_) => return -1,
-        };
+        let sig: HashSigSignature =
+            match bincode::serde::decode_from_slice(sig_data, BINCODE_CONFIG) {
+                Ok((sig, _)) => sig,
+                Err(_) => return -1,
+            };
 
         let is_valid = <HashSigScheme as SignatureScheme>::verify(&pk, epoch, message_array, &sig);
 
@@ -333,9 +335,4 @@ pub unsafe extern "C" fn hashsig_verify_bincode(
             0
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
 }
