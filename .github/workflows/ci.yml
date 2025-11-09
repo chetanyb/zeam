@@ -246,8 +246,8 @@ jobs:
     needs: [lint, build, test, build-all-provers]
     strategy:
       matrix:
-        arch: [amd64, arm64]
-    runs-on: [ ubuntu-latest, matrix.arch ]
+        builder: [ubuntu-latest, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.builder }}
     steps:
     - uses: actions/checkout@v4
       with:
