@@ -375,15 +375,14 @@ pub const BeamChain = struct {
             const cpost_state = try self.allocator.create(types.BeamState);
             try types.sszClone(self.allocator, types.BeamState, pre_state.*, cpost_state);
 
-            // 2. verify XMSS signatures before state transition
-            var validSignatures = true;
-            stf.verifySignatures(self.allocator, pre_state, &signedBlock) catch {
-                validSignatures = false;
-            };
+            // 2. verify XMSS signatures (independent step; placed before STF for now, parallelizable later)
+            try stf.verifySignatures(self.allocator, pre_state, &signedBlock);
+
+            // 3. apply state transition assuming signatures are valid (STF does not re-verify)
             try stf.apply_transition(self.allocator, cpost_state, block, .{
                 //
                 .logger = self.stf_logger,
-                .validSignatures = validSignatures,
+                .validSignatures = true,
             });
             break :computedstate cpost_state;
         };
