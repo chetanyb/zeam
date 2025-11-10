@@ -324,7 +324,7 @@ pub const BeamChain = struct {
                     self.module_logger.debug("block processing is required hasParentBlock={any}", .{hasParentBlock});
                     if (hasParentBlock) {
                         self.onBlock(signed_block, .{}) catch |err| {
-                            self.module_logger.debug(" ^^^^^^^^ Block processing error ^^^^^^ {any}", .{err});
+                            self.module_logger.err(" ^^^^^^^^ Block processing error ^^^^^^ {any}", .{err});
                         };
                     }
                 }
