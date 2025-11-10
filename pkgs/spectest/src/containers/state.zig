@@ -440,10 +440,28 @@ test "test_generate_genesis" {
         .genesis_time = 1000,
     };
 
+    // Generate pubkeys for validators using testing key manager
+    const num_validators: usize = @intCast(sample_config.num_validators);
+    const testing = @import("@zeam/testing");
+    var key_manager = try testing.TestKeyManager.init(allocator, num_validators, 10);
+    defer key_manager.deinit();
+
+    const pubkeys = try allocator.alloc(types.Bytes52, num_validators);
+    defer allocator.free(pubkeys);
+
+    for (0..num_validators) |i| {
+        var validator_pubkey: types.Bytes52 = undefined;
+        const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
+        if (pubkey_size < validator_pubkey.len) {
+            @memset(validator_pubkey[pubkey_size..], 0);
+        }
+        pubkeys[i] = validator_pubkey;
+    }
+
     // Create genesis spec
     const genesis_spec = types.GenesisSpec{
-        .num_validators = sample_config.num_validators,
         .genesis_time = sample_config.genesis_time,
+        .validator_pubkeys = pubkeys,
     };
 
     // Produce a genesis state from the sample config

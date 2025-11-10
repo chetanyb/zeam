@@ -38,34 +38,44 @@ const MockChainData = struct {
 };
 
 pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types.GenesisSpec) !MockChainData {
-    const genesis_config = from_genesis orelse types.GenesisSpec{
-        .genesis_time = 1234,
-        .num_validators = 4,
-    };
+    // Determine num_validators early
+    const num_validators: usize = if (from_genesis) |gen| @intCast(gen.numValidators()) else 4;
+    std.debug.assert(num_validators > 0); // A chain must have at least one validator.
+
+    // Init key_manager ONCE for entire function (used for genesis AND signing later)
+    var key_manager = try testing.TestKeyManager.init(allocator, num_validators, numBlocks);
+    defer key_manager.deinit();
+
+    var genesis_config: types.GenesisSpec = undefined;
+    var should_free_genesis = false;
+
+    if (from_genesis) |gen| {
+        genesis_config = gen;
+    } else {
+        // Generate pubkeys from key_manager
+        const pubkeys = try allocator.alloc(types.Bytes52, num_validators);
+        errdefer allocator.free(pubkeys);
+
+        for (0..num_validators) |i| {
+            var validator_pubkey: types.Bytes52 = undefined;
+            const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
+            if (pubkey_size < validator_pubkey.len) {
+                @memset(validator_pubkey[pubkey_size..], 0);
+            }
+            pubkeys[i] = validator_pubkey;
+        }
+
+        genesis_config = types.GenesisSpec{
+            .genesis_time = 1234,
+            .validator_pubkeys = pubkeys,
+        };
+        should_free_genesis = true;
+    }
+    defer if (should_free_genesis) allocator.free(genesis_config.validator_pubkeys);
 
     var genesis_state: types.BeamState = undefined;
     try genesis_state.genGenesisState(allocator, genesis_config);
     errdefer genesis_state.deinit();
-
-    var key_manager = try testing.TestKeyManager.init(
-        allocator,
-        genesis_config.num_validators,
-        numBlocks,
-    );
-    defer key_manager.deinit();
-
-    for (0..genesis_config.num_validators) |i| {
-        var validator_pubkey: types.Bytes52 = undefined;
-        const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
-        if (pubkey_size < validator_pubkey.len) {
-            @memset(validator_pubkey[pubkey_size..], 0);
-        }
-
-        const validator = types.Validator{
-            .pubkey = validator_pubkey,
-        };
-        try genesis_state.validators.append(validator);
-    }
     var blockList = std.ArrayList(types.SignedBlockWithAttestation).init(allocator);
     var blockRootList = std.ArrayList(types.Root).init(allocator);
 
@@ -81,20 +91,6 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
     var beam_state: types.BeamState = undefined;
     try beam_state.genGenesisState(allocator, genesis_config);
     defer beam_state.deinit();
-
-    // Add validators to beam_state to match genesis_state
-    for (0..genesis_config.num_validators) |i| {
-        var validator_pubkey: types.Bytes52 = undefined;
-        const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
-        if (pubkey_size < validator_pubkey.len) {
-            @memset(validator_pubkey[pubkey_size..], 0);
-        }
-
-        const validator = types.Validator{
-            .pubkey = validator_pubkey,
-        };
-        try beam_state.validators.append(validator);
-    }
 
     var genesis_block: types.BeamBlock = undefined;
     try beam_state.genGenesisBlock(allocator, &genesis_block);
@@ -170,7 +166,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
                 const slotAttestations = [_]types.Attestation{
                     // val 0
                     .{
-                        .validator_id = 0,
+                        .validator_id = 0 % num_validators,
                         .data = .{
                             .slot = slot - 1,
                             .head = .{ .root = parent_root, .slot = slot - 1 },
@@ -181,7 +177,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
                     // skip val1
                     // val2
                     .{
-                        .validator_id = 2,
+                        .validator_id = 2 % num_validators,
                         .data = .{
                             .slot = slot - 1,
                             .head = .{ .root = parent_root, .slot = slot - 1 },
@@ -192,7 +188,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
                     // val3
                     .{
-                        .validator_id = 3,
+                        .validator_id = 3 % num_validators,
                         .data = .{
                             .slot = slot - 1,
                             .head = .{ .root = parent_root, .slot = slot - 1 },
@@ -217,7 +213,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
                     // val 1
                     .{
-                        .validator_id = 1,
+                        .validator_id = 1 % num_validators,
                         .data = .{
                             .slot = slot - 1,
                             .head = .{ .root = parent_root, .slot = slot - 1 },
@@ -228,7 +224,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
                     // val2
                     .{
-                        .validator_id = 2,
+                        .validator_id = 2 % num_validators,
                         .data = .{
                             .slot = slot - 1,
                             .head = .{ .root = parent_root, .slot = slot - 1 },
@@ -239,7 +235,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
                     // val3
                     .{
-                        .validator_id = 3,
+                        .validator_id = 3 % num_validators,
                         .data = .{
                             .slot = slot - 1,
                             .head = .{ .root = parent_root, .slot = slot - 1 },
@@ -262,7 +258,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
                 const slotAttestations = [_]types.Attestation{
                     // val 0
                     .{
-                        .validator_id = 0,
+                        .validator_id = 0 % num_validators,
                         .data = .{
                             .slot = slot - 1,
                             .head = .{ .root = parent_root, .slot = slot - 1 },
@@ -286,7 +282,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
             else => unreachable,
         }
 
-        const proposer_index = slot % genesis_config.num_validators;
+        const proposer_index = slot % genesis_config.numValidators();
         var block = types.BeamBlock{
             .slot = slot,
             .proposer_index = proposer_index,

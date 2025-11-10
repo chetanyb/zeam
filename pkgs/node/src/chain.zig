@@ -133,7 +133,7 @@ pub const BeamChain = struct {
 
         var has_proposal = false;
         if (interval == 0) {
-            const num_validators: usize = @intCast(self.config.genesis.num_validators);
+            const num_validators: usize = @intCast(self.config.genesis.numValidators());
             const slot_proposer_id = slot % num_validators;
             if (std.mem.indexOfScalar(usize, self.registered_validator_ids, slot_proposer_id)) |index| {
                 _ = index;
@@ -627,22 +627,24 @@ const AttestationValidationError = error{
     AttestationTooFarInFuture,
 };
 
+// TODO: Enable and update this test once the keymanager file-reading PR is added
+// JSON parsing for chain config needs to support validator_pubkeys instead of num_validators
 test "process and add mock blocks into a node's chain" {
     var arena_allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_allocator.deinit();
     const allocator = arena_allocator.allocator();
 
-    const chain_spec =
-        \\{"preset": "mainnet", "name": "beamdev", "genesis_time": 1234, "num_validators": 4}
-    ;
-    const options = json.ParseOptions{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_if_needed,
+    // Generate a mock chain with validator pubkeys baked into the genesis spec.
+    const mock_chain = try stf.genMockChain(allocator, 5, null);
+    const spec_name = try allocator.dupe(u8, "beamdev");
+    const chain_config = configs.ChainConfig{
+        .id = configs.Chain.custom,
+        .genesis = mock_chain.genesis_config,
+        .spec = .{
+            .preset = params.Preset.mainnet,
+            .name = spec_name,
+        },
     };
-    const parsed_chain_spec = (try json.parseFromSlice(configs.ChainOptions, allocator, chain_spec, options)).value;
-    const chain_config = try configs.ChainConfig.init(configs.Chain.custom, parsed_chain_spec);
-
-    const mock_chain = try stf.genMockChain(allocator, 5, chain_config.genesis);
     var beam_state = mock_chain.genesis_state;
     const nodeId = 10; // random value
     var zeam_logger_config = zeam_utils.getTestLoggerConfig();
@@ -695,7 +697,7 @@ test "process and add mock blocks into a node's chain" {
         try std.testing.expect(std.mem.eql(u8, &beam_chain.forkChoice.head.blockRoot, &mock_chain.latestHead[i].root));
     }
 
-    const num_validators: usize = @intCast(mock_chain.genesis_config.num_validators);
+    const num_validators: usize = @intCast(mock_chain.genesis_config.numValidators());
     for (0..num_validators) |validator_id| {
         // all validators should have attested as per the mock chain
         const attestations_tracker = beam_chain.forkChoice.attestations.get(validator_id);
@@ -703,24 +705,24 @@ test "process and add mock blocks into a node's chain" {
     }
 }
 
+// TODO: Enable and update this test once the keymanager file-reading PR is added
+// JSON parsing for chain config needs to support validator_pubkeys instead of num_validators
 test "printSlot output demonstration" {
     var arena_allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_allocator.deinit();
     const allocator = arena_allocator.allocator();
 
-    // Create a chain configuration
-    const chain_spec =
-        \\{"preset": "mainnet", "name": "beamdev", "genesis_time": 1234, "num_validators": 4}
-    ;
-    const options = json.ParseOptions{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_if_needed,
-    };
-    const parsed_chain_spec = (try json.parseFromSlice(configs.ChainOptions, allocator, chain_spec, options)).value;
-    const chain_config = try configs.ChainConfig.init(configs.Chain.custom, parsed_chain_spec);
-
     // Create a mock chain with some blocks
-    const mock_chain = try stf.genMockChain(allocator, 3, chain_config.genesis);
+    const mock_chain = try stf.genMockChain(allocator, 3, null);
+    const spec_name = try allocator.dupe(u8, "beamdev");
+    const chain_config = configs.ChainConfig{
+        .id = configs.Chain.custom,
+        .genesis = mock_chain.genesis_config,
+        .spec = .{
+            .preset = params.Preset.mainnet,
+            .name = spec_name,
+        },
+    };
     var beam_state = mock_chain.genesis_state;
     const nodeId = 42; // Test node ID
     var zeam_logger_config = zeam_utils.getLoggerConfig(.info, null);
@@ -772,6 +774,8 @@ test "printSlot output demonstration" {
 // Attestation Validation Tests
 // These tests align with leanSpec's test_attestation_processing.py
 
+// TODO: Enable and update this test once the keymanager file-reading PR is added
+// JSON parsing for chain config needs to support validator_pubkeys instead of num_validators
 test "attestation validation - comprehensive" {
     // Comprehensive test covering all attestation validation rules
     // This consolidates multiple validation checks into one test to avoid redundant setup
@@ -779,17 +783,16 @@ test "attestation validation - comprehensive" {
     defer arena_allocator.deinit();
     const allocator = arena_allocator.allocator();
 
-    const chain_spec =
-        \\{"preset": "mainnet", "name": "beamdev", "genesis_time": 1234, "num_validators": 4}
-    ;
-    const options = json.ParseOptions{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_if_needed,
+    const mock_chain = try stf.genMockChain(allocator, 3, null);
+    const spec_name = try allocator.dupe(u8, "beamdev");
+    const chain_config = configs.ChainConfig{
+        .id = configs.Chain.custom,
+        .genesis = mock_chain.genesis_config,
+        .spec = .{
+            .preset = params.Preset.mainnet,
+            .name = spec_name,
+        },
     };
-    const parsed_chain_spec = (try json.parseFromSlice(configs.ChainOptions, allocator, chain_spec, options)).value;
-    const chain_config = try configs.ChainConfig.init(configs.Chain.custom, parsed_chain_spec);
-
-    const mock_chain = try stf.genMockChain(allocator, 3, chain_config.genesis);
     var beam_state = mock_chain.genesis_state;
     var zeam_logger_config = zeam_utils.getTestLoggerConfig();
 
@@ -1055,6 +1058,8 @@ test "attestation validation - comprehensive" {
     }
 }
 
+// TODO: Enable and update this test once the keymanager file-reading PR is added
+// JSON parsing for chain config needs to support validator_pubkeys instead of num_validators
 test "attestation validation - gossip vs block future slot handling" {
     // Test that gossip and block attestations have different future slot tolerances
     // Gossip: must be <= current_slot
@@ -1063,17 +1068,16 @@ test "attestation validation - gossip vs block future slot handling" {
     defer arena_allocator.deinit();
     const allocator = arena_allocator.allocator();
 
-    const chain_spec =
-        \\{"preset": "mainnet", "name": "beamdev", "genesis_time": 1234, "num_validators": 4}
-    ;
-    const options = json.ParseOptions{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_if_needed,
+    const mock_chain = try stf.genMockChain(allocator, 2, null);
+    const spec_name = try allocator.dupe(u8, "beamdev");
+    const chain_config = configs.ChainConfig{
+        .id = configs.Chain.custom,
+        .genesis = mock_chain.genesis_config,
+        .spec = .{
+            .preset = params.Preset.mainnet,
+            .name = spec_name,
+        },
     };
-    const parsed_chain_spec = (try json.parseFromSlice(configs.ChainOptions, allocator, chain_spec, options)).value;
-    const chain_config = try configs.ChainConfig.init(configs.Chain.custom, parsed_chain_spec);
-
-    const mock_chain = try stf.genMockChain(allocator, 2, chain_config.genesis);
     var beam_state = mock_chain.genesis_state;
     var zeam_logger_config = zeam_utils.getTestLoggerConfig();
 
@@ -1151,23 +1155,24 @@ test "attestation validation - gossip vs block future slot handling" {
     try std.testing.expectError(error.AttestationTooFarInFuture, beam_chain.validateAttestation(too_far_attestation.message, false));
     try std.testing.expectError(error.AttestationTooFarInFuture, beam_chain.validateAttestation(too_far_attestation.message, true));
 }
+// TODO: Enable and update this test once the keymanager file-reading PR is added
+// JSON parsing for chain config needs to support validator_pubkeys instead of num_validators
 test "attestation processing - valid block attestation" {
     // Test that valid attestations from blocks are processed correctly
     var arena_allocator = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_allocator.deinit();
     const allocator = arena_allocator.allocator();
 
-    const chain_spec =
-        \\{"preset": "mainnet", "name": "beamdev", "genesis_time": 1234, "num_validators": 4}
-    ;
-    const options = json.ParseOptions{
-        .ignore_unknown_fields = true,
-        .allocate = .alloc_if_needed,
+    const mock_chain = try stf.genMockChain(allocator, 3, null);
+    const spec_name = try allocator.dupe(u8, "beamdev");
+    const chain_config = configs.ChainConfig{
+        .id = configs.Chain.custom,
+        .genesis = mock_chain.genesis_config,
+        .spec = .{
+            .preset = params.Preset.mainnet,
+            .name = spec_name,
+        },
     };
-    const parsed_chain_spec = (try json.parseFromSlice(configs.ChainOptions, allocator, chain_spec, options)).value;
-    const chain_config = try configs.ChainConfig.init(configs.Chain.custom, parsed_chain_spec);
-
-    const mock_chain = try stf.genMockChain(allocator, 3, chain_config.genesis);
     var beam_state = mock_chain.genesis_state;
     var zeam_logger_config = zeam_utils.getTestLoggerConfig();
 

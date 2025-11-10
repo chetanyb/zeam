@@ -227,11 +227,7 @@ fn mainInner() !void {
             };
 
             // generate a mock chain with 5 blocks including genesis i.e. 4 blocks on top of genesis
-            const mock_config = types.GenesisSpec{
-                .genesis_time = genesis,
-                .num_validators = num_validators,
-            };
-            const mock_chain = sft_factory.genMockChain(allocator, 5, mock_config) catch |err| {
+            const mock_chain = sft_factory.genMockChain(allocator, 5, null) catch |err| {
                 ErrorHandler.logErrorWithOperation(err, "generate mock chain");
                 return err;
             };
@@ -291,7 +287,8 @@ fn mainInner() !void {
             const time_now: usize = @intCast(time_now_ms / std.time.ms_per_s);
 
             chain_options.genesis_time = time_now;
-            chain_options.num_validators = num_validators;
+            // TODO: Set validator_pubkeys from keymanager
+            // chain_options.validator_pubkeys = ...;
             // transfer ownership of the chain_options to ChainConfig
             const chain_config = try ChainConfig.init(Chain.custom, chain_options);
             var anchorState: types.BeamState = undefined;

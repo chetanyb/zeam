@@ -274,6 +274,7 @@ pub fn build(b: *Builder) !void {
     zeam_beam_node.addImport("@zeam/network", zeam_network);
     zeam_beam_node.addImport("@zeam/database", zeam_database);
     zeam_beam_node.addImport("@zeam/api", zeam_api);
+    zeam_beam_node.addImport("@zeam/testing", zeam_testing);
 
     const zeam_spectests = b.addModule("zeam_spectests", .{
         .target = target,
