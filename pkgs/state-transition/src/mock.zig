@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 const params = @import("@zeam/params");
 const types = @import("@zeam/types");
 const zeam_utils = @import("@zeam/utils");
-const testing = @import("@zeam/testing");
+const keymanager = @import("@zeam/key-manager");
 
 const transition = @import("./transition.zig");
 
@@ -43,7 +43,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
     std.debug.assert(num_validators > 0); // A chain must have at least one validator.
 
     // Init key_manager ONCE for entire function (used for genesis AND signing later)
-    var key_manager = try testing.TestKeyManager.init(allocator, num_validators, numBlocks);
+    var key_manager = try keymanager.getTestKeyManager(allocator, num_validators, numBlocks);
     defer key_manager.deinit();
 
     var genesis_config: types.GenesisSpec = undefined;

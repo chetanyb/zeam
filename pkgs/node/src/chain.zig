@@ -14,7 +14,7 @@ const database = @import("@zeam/database");
 const event_broadcaster = api.event_broadcaster;
 
 const zeam_utils = @import("@zeam/utils");
-const testing = @import("@zeam/testing");
+const keymanager = @import("@zeam/key-manager");
 const jsonToString = zeam_utils.jsonToString;
 
 pub const fcFactory = @import("./forkchoice.zig");
@@ -1227,7 +1227,7 @@ test "attestation processing - valid block attestation" {
         },
     };
 
-    var key_manager = try testing.TestKeyManager.init(allocator, 4, 3);
+    var key_manager = try keymanager.getTestKeyManager(allocator, 4, 3);
     defer key_manager.deinit();
 
     const signature = try key_manager.signAttestation(&message, allocator);

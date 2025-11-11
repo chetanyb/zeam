@@ -442,8 +442,8 @@ test "test_generate_genesis" {
 
     // Generate pubkeys for validators using testing key manager
     const num_validators: usize = @intCast(sample_config.num_validators);
-    const testing = @import("@zeam/testing");
-    var key_manager = try testing.TestKeyManager.init(allocator, num_validators, 10);
+    const keymanager = @import("@zeam/key-manager");
+    var key_manager = try keymanager.getTestKeyManager(allocator, num_validators, 10);
     defer key_manager.deinit();
 
     const pubkeys = try allocator.alloc(types.Bytes52, num_validators);

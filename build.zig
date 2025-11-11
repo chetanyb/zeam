@@ -188,15 +188,15 @@ pub fn build(b: *Builder) !void {
         .root_source_file = b.path("pkgs/xmss/src/hashsig.zig"),
     });
 
-    // add zeam-testing (test infrastructure for XMSS signatures)
-    const zeam_testing = b.addModule("@zeam/testing", .{
-        .root_source_file = b.path("pkgs/testing/signature_helpers.zig"),
+    // add zeam-key-manager
+    const zeam_key_manager = b.addModule("@zeam/key-manager", .{
+        .root_source_file = b.path("pkgs/key-manager/src/lib.zig"),
         .target = target,
         .optimize = optimize,
     });
-    zeam_testing.addImport("@zeam/xmss", zeam_xmss);
-    zeam_testing.addImport("@zeam/types", zeam_types);
-    zeam_testing.addImport("ssz", ssz);
+    zeam_key_manager.addImport("@zeam/xmss", zeam_xmss);
+    zeam_key_manager.addImport("@zeam/types", zeam_types);
+    zeam_key_manager.addImport("ssz", ssz);
 
     // add zeam-state-transition
     const zeam_state_transition = b.addModule("@zeam/state-transition", .{
@@ -210,7 +210,7 @@ pub fn build(b: *Builder) !void {
     zeam_state_transition.addImport("ssz", ssz);
     zeam_state_transition.addImport("@zeam/api", zeam_api);
     zeam_state_transition.addImport("@zeam/xmss", zeam_xmss);
-    zeam_state_transition.addImport("@zeam/testing", zeam_testing);
+    zeam_state_transition.addImport("@zeam/key-manager", zeam_key_manager);
 
     // add state proving manager
     const zeam_state_proving_manager = b.addModule("@zeam/state-proving-manager", .{
@@ -274,7 +274,7 @@ pub fn build(b: *Builder) !void {
     zeam_beam_node.addImport("@zeam/network", zeam_network);
     zeam_beam_node.addImport("@zeam/database", zeam_database);
     zeam_beam_node.addImport("@zeam/api", zeam_api);
-    zeam_beam_node.addImport("@zeam/testing", zeam_testing);
+    zeam_beam_node.addImport("@zeam/key-manager", zeam_key_manager);
 
     const zeam_spectests = b.addModule("zeam_spectests", .{
         .target = target,
@@ -285,6 +285,7 @@ pub fn build(b: *Builder) !void {
     zeam_spectests.addImport("@zeam/types", zeam_types);
     zeam_spectests.addImport("@zeam/configs", zeam_configs);
     zeam_spectests.addImport("@zeam/params", zeam_params);
+    zeam_spectests.addImport("@zeam/key-manager", zeam_key_manager);
     zeam_spectests.addImport("ssz", ssz);
 
     // Add the cli executable
