@@ -53,8 +53,13 @@ const ChainConfigError = error{
 pub fn genesisConfigFromYAML(config: Yaml, override_genesis_time: ?u64) !types.GenesisSpec {
     _ = config;
     _ = override_genesis_time;
-    // TODO: Implement with keymanager in followup PR
-    // Need to read validator pubkeys from keymanager instead of num_validators
+    // TODO: Implement YAML parsing for validator pubkeys
+    // This function needs to:
+    // 1. Parse VALIDATOR_COUNT or VALIDATOR_PUBKEYS from config.yaml
+    // 2. If VALIDATOR_COUNT: create keymanager and extract pubkeys
+    // 3. If VALIDATOR_PUBKEYS: read them directly from YAML
+    // 4. Return GenesisSpec with genesis_time and validator_pubkeys populated
+    // Until this is implemented, use beam command for testing or provide genesis_spec programmatically
     return error.NotImplemented;
 }
 

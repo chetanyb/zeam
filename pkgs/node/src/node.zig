@@ -8,6 +8,7 @@ const configs = @import("@zeam/configs");
 const networks = @import("@zeam/network");
 const zeam_utils = @import("@zeam/utils");
 const ssz = @import("ssz");
+const key_manager_lib = @import("@zeam/key-manager");
 
 const utils = @import("./utils.zig");
 const OnIntervalCbWrapper = utils.OnIntervalCbWrapper;
@@ -26,6 +27,7 @@ const NodeOpts = struct {
     backend: networks.NetworkInterface,
     clock: *clockFactory.Clock,
     validator_ids: ?[]usize = null,
+    key_manager: ?*const key_manager_lib.KeyManager = null,
     nodeId: u32 = 0,
     db: database.Db,
     logger_config: *zeam_utils.ZeamLoggerConfig,
@@ -67,7 +69,15 @@ pub const BeamNode = struct {
             allocator.destroy(chain);
         }
         if (opts.validator_ids) |ids| {
-            validator = validatorClient.ValidatorClient.init(allocator, opts.config, .{ .ids = ids, .chain = chain, .network = network, .logger = opts.logger_config.logger(.validator) });
+            // key_manager is required when validator_ids is provided
+            const km = opts.key_manager orelse return error.KeyManagerRequired;
+            validator = validatorClient.ValidatorClient.init(allocator, opts.config, .{
+                .ids = ids,
+                .chain = chain,
+                .network = network,
+                .logger = opts.logger_config.logger(.validator),
+                .key_manager = km,
+            });
             chain.registerValidatorIds(ids);
         }
 

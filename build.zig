@@ -322,6 +322,7 @@ pub fn build(b: *Builder) !void {
     cli_exe.root_module.addImport("multiformats", multiformats);
     cli_exe.root_module.addImport("enr", enr);
     cli_exe.root_module.addImport("yaml", yaml);
+    cli_exe.root_module.addImport("@zeam/key-manager", zeam_key_manager);
 
     cli_exe.step.dependOn(&zkvm_host_cmd.step);
     addRustGlueLib(b, cli_exe, target, prover);

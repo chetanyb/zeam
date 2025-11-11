@@ -5,6 +5,7 @@ const configs = @import("@zeam/configs");
 const types = @import("@zeam/types");
 const zeam_utils = @import("@zeam/utils");
 const jsonToString = zeam_utils.jsonToString;
+const key_manager_lib = @import("@zeam/key-manager");
 
 const chains = @import("./chain.zig");
 const networkFactory = @import("./network.zig");
@@ -44,6 +45,7 @@ pub const ValidatorClientParams = struct {
     chain: *chains.BeamChain,
     network: networkFactory.Network,
     logger: zeam_utils.ModuleLogger,
+    key_manager: *const key_manager_lib.KeyManager,
 };
 
 pub const ValidatorClient = struct {
@@ -53,6 +55,7 @@ pub const ValidatorClient = struct {
     network: networkFactory.Network,
     ids: []usize,
     logger: zeam_utils.ModuleLogger,
+    key_manager: *const key_manager_lib.KeyManager,
 
     const Self = @This();
     pub fn init(allocator: Allocator, config: configs.ChainConfig, opts: ValidatorClientParams) Self {
@@ -63,6 +66,7 @@ pub const ValidatorClient = struct {
             .network = opts.network,
             .ids = opts.ids,
             .logger = opts.logger,
+            .key_manager = opts.key_manager,
         };
     }
 
@@ -111,12 +115,23 @@ pub const ValidatorClient = struct {
                 .proposer_attestation = proposer_attestation,
             };
 
-            // 4. proposer signature which is currently over just proposer_attestation but will eventually
-            //  be over the full message when the leanVM signature validation is introduced which can validate
-            //  the proposer_attestation with that combined signature
+            // 4. Sign all attestations (body attestations + proposer attestation)
+            var signatures = try types.BlockSignatures.init(self.allocator);
+            errdefer signatures.deinit();
+
+            // Sign body attestations
+            for (produced_block.block.body.attestations.constSlice()) |attestation| {
+                const signature = try self.key_manager.signAttestation(&attestation, self.allocator);
+                try signatures.append(signature);
+            }
+
+            // Sign proposer attestation (last signature)
+            const proposer_signature = try self.key_manager.signAttestation(&proposer_attestation, self.allocator);
+            try signatures.append(proposer_signature);
+
             const signed_block = types.SignedBlockWithAttestation{
                 .message = block_with_attestation,
-                .signature = try types.createBlockSignatures(self.allocator, produced_block.block.body.attestations.len()),
+                .signature = signatures,
             };
 
             const signed_block_json = try signed_block.toJson(self.allocator);
@@ -153,9 +168,13 @@ pub const ValidatorClient = struct {
                 .validator_id = validator_id,
                 .data = attestation_data,
             };
+
+            // Sign the attestation using keymanager
+            const signature = try self.key_manager.signAttestation(&attestation, self.allocator);
+
             const signed_attestation: types.SignedAttestation = .{
                 .message = attestation,
-                .signature = [_]u8{0} ** types.SIGSIZE,
+                .signature = signature,
             };
 
             try result.addAttestation(signed_attestation);

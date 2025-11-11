@@ -87,6 +87,7 @@ pub const Node = struct {
     allocator: std.mem.Allocator,
     logger: zeam_utils.ModuleLogger,
     db: database.Db,
+    key_manager: @import("@zeam/key-manager").KeyManager,
 
     const Self = @This();
 
@@ -109,8 +110,11 @@ pub const Node = struct {
         };
         var chain_options = (try json.parseFromSlice(ChainOptions, allocator, chain_spec, json_options)).value;
         chain_options.genesis_time = options.genesis_spec.genesis_time;
-        // TODO: Set validator_pubkeys from keymanager
-        // chain_options.validator_pubkeys = options.genesis_spec.validator_pubkeys;
+
+        // Set validator_pubkeys from genesis_spec (which comes from YAML or testing)
+        // TODO: Once genesisConfigFromYAML is implemented, this will read from config.yaml
+        chain_options.validator_pubkeys = options.genesis_spec.validator_pubkeys;
+
         // transfer ownership of the chain_options to ChainConfig
         const chain_config = try ChainConfig.init(Chain.custom, chain_options);
         var anchorState: types.BeamState = undefined;
@@ -138,6 +142,12 @@ pub const Node = struct {
         var db = try database.Db.open(allocator, options.logger_config.logger(.database), options.database_path);
         errdefer db.deinit();
 
+        // Create testing keymanager (TODO: replace with file-based keymanager in followup PR)
+        const key_manager_lib = @import("@zeam/key-manager");
+        const num_validators: usize = @intCast(chain_config.genesis.numValidators());
+        self.key_manager = try key_manager_lib.getTestKeyManager(allocator, num_validators, 10000);
+        errdefer self.key_manager.deinit();
+
         try self.beam_node.init(allocator, .{
             .nodeId = @intCast(options.node_key_index),
             .config = chain_config,
@@ -145,6 +155,7 @@ pub const Node = struct {
             .backend = self.network.getNetworkInterface(),
             .clock = &self.clock,
             .validator_ids = options.validator_indices,
+            .key_manager = &self.key_manager,
             .db = db,
             .logger_config = options.logger_config,
         });
@@ -155,6 +166,7 @@ pub const Node = struct {
     pub fn deinit(self: *Self) void {
         self.clock.deinit(self.allocator);
         self.beam_node.deinit();
+        self.key_manager.deinit();
         self.network.deinit();
         self.enr.deinit();
         self.db.deinit();
