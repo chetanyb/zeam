@@ -372,8 +372,8 @@ pub const ForkChoice = struct {
         };
     }
 
-    pub fn getProposalAttestations(self: *Self) !types.Attestations {
-        var included_attestations = try types.Attestations.init(self.allocator);
+    pub fn getProposalAttestations(self: *Self) ![]types.SignedAttestation {
+        var included_attestations = std.ArrayList(types.SignedAttestation).init(self.allocator);
         const latest_justified = self.fcStore.latest_justified;
 
         // TODO naive strategy to include all attestations that are consistent with the latest justified
@@ -386,11 +386,11 @@ pub const ForkChoice = struct {
 
             if (validator_attestation) |signed_attestation| {
                 if (std.mem.eql(u8, &latest_justified.root, &signed_attestation.message.data.source.root)) {
-                    try included_attestations.append(signed_attestation.message);
+                    try included_attestations.append(signed_attestation);
                 }
             }
         }
-        return included_attestations;
+        return included_attestations.toOwnedSlice();
     }
 
     pub fn getAttestationTarget(self: *Self) !types.Checkpoint {

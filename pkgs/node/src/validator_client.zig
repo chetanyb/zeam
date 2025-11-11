@@ -115,17 +115,11 @@ pub const ValidatorClient = struct {
                 .proposer_attestation = proposer_attestation,
             };
 
-            // 4. Sign all attestations (body attestations + proposer attestation)
-            var signatures = try types.BlockSignatures.init(self.allocator);
-            errdefer signatures.deinit();
+            // 4. Prepare signatures by adding the proposer signature to the already received list of
+            //    attestation signatures
+            var signatures = produced_block.signatures;
 
-            // Sign body attestations
-            for (produced_block.block.body.attestations.constSlice()) |attestation| {
-                const signature = try self.key_manager.signAttestation(&attestation, self.allocator);
-                try signatures.append(signature);
-            }
-
-            // Sign proposer attestation (last signature)
+            // 5. Sign proposer attestation (last signature)
             const proposer_signature = try self.key_manager.signAttestation(&proposer_attestation, self.allocator);
             try signatures.append(proposer_signature);
 
@@ -140,7 +134,7 @@ pub const ValidatorClient = struct {
 
             self.logger.info("validator produced block slot={d} block={s}", .{ slot, block_str });
 
-            // Create ValidatorOutput
+            // 6. Create ValidatorOutput
             var result = ValidatorClientOutput.init(self.allocator);
             try result.addBlock(signed_block);
             return result;
