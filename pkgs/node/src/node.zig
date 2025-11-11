@@ -358,6 +358,7 @@ pub const BeamNode = struct {
                 self.chain.forkChoice.fcStore.time,
                 itime_intervals,
             });
+            return;
         }
 
         // till its time to attest atleast for first time don't run onInterval,
