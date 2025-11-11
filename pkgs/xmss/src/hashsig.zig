@@ -322,3 +322,30 @@ test "HashSig: bincode serialize and verify" {
 
     std.debug.print("Verification succeeded!\n", .{});
 }
+
+test "HashSig: verify fails with zero signature" {
+    const allocator = std.testing.allocator;
+
+    var keypair = try KeyPair.generate(allocator, "test_seed", 0, 10);
+    defer keypair.deinit();
+
+    const message = [_]u8{1} ** 32;
+    const epoch: u32 = 0;
+
+    // Serialize public key
+    var pubkey_buffer: [256]u8 = undefined;
+    const pubkey_size = try keypair.pubkeyToBytes(&pubkey_buffer);
+
+    // Create invalid signature with all zeros
+    var zero_sig_buffer = [_]u8{0} ** 4000;
+
+    // Verification should fail
+    const result = verifyBincode(
+        pubkey_buffer[0..pubkey_size],
+        &message,
+        epoch,
+        &zero_sig_buffer,
+    );
+
+    try std.testing.expectError(HashSigError.VerificationFailed, result);
+}
