@@ -14,6 +14,7 @@ const database = @import("@zeam/database");
 const event_broadcaster = api.event_broadcaster;
 
 const zeam_utils = @import("@zeam/utils");
+const testing = @import("@zeam/testing");
 const jsonToString = zeam_utils.jsonToString;
 
 pub const fcFactory = @import("./forkchoice.zig");
@@ -325,6 +326,7 @@ pub const BeamChain = struct {
                     if (hasParentBlock) {
                         self.onBlock(signed_block, .{}) catch |err| {
                             self.module_logger.err(" ^^^^^^^^ Block processing error ^^^^^^ {any}", .{err});
+                            return err;
                         };
                     }
                 }
@@ -347,6 +349,7 @@ pub const BeamChain = struct {
                 // Process validated attestation
                 self.onAttestation(signed_attestation) catch |err| {
                     self.module_logger.err("Attestation processing error: {any}", .{err});
+                    return err;
                 };
             },
         }
@@ -598,6 +601,12 @@ pub const BeamChain = struct {
     pub fn onAttestation(self: *Self, signedAttestation: types.SignedAttestation) !void {
         // Validate attestation before processing (gossip = not from block)
         try self.validateAttestation(signedAttestation.message, false);
+
+        const attestation = signedAttestation.message;
+        const state = self.states.get(attestation.data.target.root) orelse return AttestationValidationError.MissingState;
+
+        try stf.verifySingleAttestation(self.allocator, state, &attestation, &signedAttestation.signature);
+
         return self.forkChoice.onAttestation(signedAttestation, false);
     }
 
@@ -617,6 +626,7 @@ pub const BeamChain = struct {
 const BlockProcessingError = error{MissingPreState};
 const BlockProductionError = error{ NotImplemented, MissingPreState };
 const AttestationValidationError = error{
+    MissingState,
     UnknownSourceBlock,
     UnknownTargetBlock,
     UnknownHeadBlock,
@@ -1198,26 +1208,33 @@ test "attestation processing - valid block attestation" {
     }
 
     // Create a valid attestation
-    const valid_attestation: types.SignedAttestation = .{
-        .message = .{
-            .validator_id = 1,
-            .data = .{
+    const message = types.Attestation{
+        .validator_id = 1,
+        .data = .{
+            .slot = 2,
+            .head = types.Checkpoint{
+                .root = mock_chain.blockRoots[2],
                 .slot = 2,
-                .head = types.Checkpoint{
-                    .root = mock_chain.blockRoots[2],
-                    .slot = 2,
-                },
-                .source = types.Checkpoint{
-                    .root = mock_chain.blockRoots[1],
-                    .slot = 1,
-                },
-                .target = types.Checkpoint{
-                    .root = mock_chain.blockRoots[2],
-                    .slot = 2,
-                },
+            },
+            .source = types.Checkpoint{
+                .root = mock_chain.blockRoots[1],
+                .slot = 1,
+            },
+            .target = types.Checkpoint{
+                .root = mock_chain.blockRoots[2],
+                .slot = 2,
             },
         },
-        .signature = [_]u8{0} ** types.SIGSIZE,
+    };
+
+    var key_manager = try testing.TestKeyManager.init(allocator, 4, 3);
+    defer key_manager.deinit();
+
+    const signature = try key_manager.signAttestation(&message, allocator);
+
+    const valid_attestation: types.SignedAttestation = .{
+        .message = message,
+        .signature = signature,
     };
 
     // Process attestation through chain (this validates and then processes)

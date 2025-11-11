@@ -82,7 +82,7 @@ pub fn verifySignatures(
     );
 }
 
-fn verifySingleAttestation(
+pub fn verifySingleAttestation(
     allocator: Allocator,
     state: *const types.BeamState,
     attestation: *const types.Attestation,
