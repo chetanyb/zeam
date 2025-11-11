@@ -79,9 +79,6 @@ const ZeamArgs = struct {
     log_file_active_level: std.log.Level = .debug, //default log file ActiveLevel
     monocolor_file_log: bool = false, //dont log colors in log files
     console_log_level: std.log.Level = .info, //default console log level
-    // choosing 3 vals as default so that default beam cmd run which runs two nodes to interop
-    // can justify and finalize
-    num_validators: u64 = 3,
     help: bool = false,
     version: bool = false,
 
@@ -147,7 +144,6 @@ const ZeamArgs = struct {
 
     pub const __messages__ = .{
         .genesis = "Genesis time for the chain",
-        .num_validators = "Number of validators",
         .log_filename = "Log Filename",
         .log_file_active_level = "Log File Active Level, May be separate from console log level",
         .monocolor_file_log = "Dont Log color formatted log in files for use in non color supported editors",
@@ -186,13 +182,12 @@ fn mainInner() !void {
         return err;
     };
     const genesis = opts.args.genesis;
-    const num_validators = opts.args.num_validators;
     const log_filename = opts.args.log_filename;
     const log_file_active_level = opts.args.log_file_active_level;
     const monocolor_file_log = opts.args.monocolor_file_log;
     const console_log_level = opts.args.console_log_level;
 
-    std.debug.print("opts ={any} genesis={d} num_validators={d}\n", .{ opts, genesis, num_validators });
+    std.debug.print("opts ={any} genesis={d}\n", .{ opts, genesis });
 
     switch (opts.args.__commands__) {
         .clock => {
@@ -227,11 +222,7 @@ fn mainInner() !void {
             };
 
             // generate a mock chain with 5 blocks including genesis i.e. 4 blocks on top of genesis
-            const mock_config = types.GenesisSpec{
-                .genesis_time = genesis,
-                .num_validators = num_validators,
-            };
-            const mock_chain = sft_factory.genMockChain(allocator, 5, mock_config) catch |err| {
+            const mock_chain = sft_factory.genMockChain(allocator, 5, null) catch |err| {
                 ErrorHandler.logErrorWithOperation(err, "generate mock chain");
                 return err;
             };
@@ -291,7 +282,23 @@ fn mainInner() !void {
             const time_now: usize = @intCast(time_now_ms / std.time.ms_per_s);
 
             chain_options.genesis_time = time_now;
-            chain_options.num_validators = num_validators;
+
+            // Create key manager FIRST to get validator pubkeys for genesis
+            const key_manager_lib = @import("@zeam/key-manager");
+            // Using 3 validators: so by default beam cmd command runs two nodes to interop
+            const num_validators: usize = 3;
+            var key_manager = try key_manager_lib.getTestKeyManager(allocator, num_validators, 10000);
+            defer key_manager.deinit();
+
+            // Get validator pubkeys from keymanager
+            const pubkeys = try key_manager.getAllPubkeys(allocator, num_validators);
+            var owns_pubkeys = true;
+            defer if (owns_pubkeys) allocator.free(pubkeys);
+
+            // Set validator_pubkeys in chain_options
+            chain_options.validator_pubkeys = pubkeys;
+            owns_pubkeys = false; // ownership moved into genesis spec
+
             // transfer ownership of the chain_options to ChainConfig
             const chain_config = try ChainConfig.init(Chain.custom, chain_options);
             var anchorState: types.BeamState = undefined;
@@ -396,6 +403,7 @@ fn mainInner() !void {
                 .backend = backend1,
                 .clock = clock,
                 .validator_ids = &validator_ids_1,
+                .key_manager = &key_manager,
                 .db = db_1,
                 .logger_config = &logger1_config,
             });
@@ -409,6 +417,7 @@ fn mainInner() !void {
                 .backend = backend2,
                 .clock = clock,
                 .validator_ids = &validator_ids_2,
+                .key_manager = &key_manager,
                 .db = db_2,
                 .logger_config = &logger2_config,
             });

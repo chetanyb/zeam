@@ -181,6 +181,23 @@ pub fn build(b: *Builder) !void {
     zeam_api.addImport("@zeam/types", zeam_types);
     zeam_api.addImport("@zeam/utils", zeam_utils);
 
+    // add zeam-xmss
+    const zeam_xmss = b.addModule("@zeam/xmss", .{
+        .target = target,
+        .optimize = optimize,
+        .root_source_file = b.path("pkgs/xmss/src/hashsig.zig"),
+    });
+
+    // add zeam-key-manager
+    const zeam_key_manager = b.addModule("@zeam/key-manager", .{
+        .root_source_file = b.path("pkgs/key-manager/src/lib.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    zeam_key_manager.addImport("@zeam/xmss", zeam_xmss);
+    zeam_key_manager.addImport("@zeam/types", zeam_types);
+    zeam_key_manager.addImport("ssz", ssz);
+
     // add zeam-state-transition
     const zeam_state_transition = b.addModule("@zeam/state-transition", .{
         .root_source_file = b.path("pkgs/state-transition/src/lib.zig"),
@@ -192,6 +209,8 @@ pub fn build(b: *Builder) !void {
     zeam_state_transition.addImport("@zeam/types", zeam_types);
     zeam_state_transition.addImport("ssz", ssz);
     zeam_state_transition.addImport("@zeam/api", zeam_api);
+    zeam_state_transition.addImport("@zeam/xmss", zeam_xmss);
+    zeam_state_transition.addImport("@zeam/key-manager", zeam_key_manager);
 
     // add state proving manager
     const zeam_state_proving_manager = b.addModule("@zeam/state-proving-manager", .{
@@ -224,13 +243,6 @@ pub fn build(b: *Builder) !void {
     zeam_database.addImport("@zeam/utils", zeam_utils);
     zeam_database.addImport("@zeam/types", zeam_types);
 
-    // add zeam-xmss
-    const zeam_xmss = b.addModule("@zeam/xmss", .{
-        .target = target,
-        .optimize = optimize,
-        .root_source_file = b.path("pkgs/xmss/src/hashsig.zig"),
-    });
-
     // add network
     const zeam_network = b.addModule("@zeam/network", .{
         .target = target,
@@ -262,6 +274,7 @@ pub fn build(b: *Builder) !void {
     zeam_beam_node.addImport("@zeam/network", zeam_network);
     zeam_beam_node.addImport("@zeam/database", zeam_database);
     zeam_beam_node.addImport("@zeam/api", zeam_api);
+    zeam_beam_node.addImport("@zeam/key-manager", zeam_key_manager);
 
     const zeam_spectests = b.addModule("zeam_spectests", .{
         .target = target,
@@ -272,6 +285,7 @@ pub fn build(b: *Builder) !void {
     zeam_spectests.addImport("@zeam/types", zeam_types);
     zeam_spectests.addImport("@zeam/configs", zeam_configs);
     zeam_spectests.addImport("@zeam/params", zeam_params);
+    zeam_spectests.addImport("@zeam/key-manager", zeam_key_manager);
     zeam_spectests.addImport("ssz", ssz);
 
     // Add the cli executable
@@ -308,6 +322,7 @@ pub fn build(b: *Builder) !void {
     cli_exe.root_module.addImport("multiformats", multiformats);
     cli_exe.root_module.addImport("enr", enr);
     cli_exe.root_module.addImport("yaml", yaml);
+    cli_exe.root_module.addImport("@zeam/key-manager", zeam_key_manager);
 
     cli_exe.step.dependOn(&zkvm_host_cmd.step);
     addRustGlueLib(b, cli_exe, target, prover);
