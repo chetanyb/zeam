@@ -564,5 +564,3 @@ test "ssz seralize/deserialize signed beam state" {
         std.testing.allocator,
     );
 }
-
-

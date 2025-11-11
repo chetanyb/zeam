@@ -655,7 +655,7 @@ fn constructENRFromFields(allocator: std.mem.Allocator, private_key: []const u8,
     return enr;
 }
 
-// TODO: Enable and update the this test once the YAML parsing for public keys PR is added 
+// TODO: Enable and update the this test once the YAML parsing for public keys PR is added
 // test "config yaml parsing" {
 //     var config1 = try utils_lib.loadFromYAMLFile(std.testing.allocator, "pkgs/cli/test/fixtures/config.yaml");
 //     defer config1.deinit(std.testing.allocator);

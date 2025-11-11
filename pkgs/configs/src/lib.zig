@@ -63,13 +63,13 @@ pub fn genesisConfigFromYAML(config: Yaml, override_genesis_time: ?u64) !types.G
     return error.NotImplemented;
 }
 
-// TODO: Enable and update the this test once the YAML parsing for public keys PR is added 
+// TODO: Enable and update the this test once the YAML parsing for public keys PR is added
 // test "load genesis config from yaml" {
 //     const yaml_content =
 //         \\# Genesis Settings
 //         \\GENESIS_TIME: 1704085200
 //         \\
-//         \\# Validator Settings  
+//         \\# Validator Settings
 //         \\VALIDATOR_COUNT: 9
 //     ;
 //
