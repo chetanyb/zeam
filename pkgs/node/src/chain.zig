@@ -48,6 +48,8 @@ pub const CachedProcessedBlockInfo = struct {
 pub const ProducedBlock = struct {
     block: types.BeamBlock,
     blockRoot: types.Root,
+    // signatures corresponding to attestations in the blockbody
+    signatures: types.BlockSignatures,
 };
 
 pub const BeamChain = struct {
@@ -168,7 +170,9 @@ pub const BeamChain = struct {
         // one must make the forkchoice tick to the right time if there is a race condition
         // however in that scenario forkchoice also needs to be protected by mutex/kept thread safe
         const chainHead = try self.forkChoice.updateHead();
-        const attestations = try self.forkChoice.getProposalAttestations();
+        const signed_attestations = try self.forkChoice.getProposalAttestations();
+        defer self.allocator.free(signed_attestations);
+
         const parent_root = chainHead.blockRoot;
 
         const pre_state = self.states.get(parent_root) orelse return BlockProductionError.MissingPreState;
@@ -185,7 +189,13 @@ pub const BeamChain = struct {
             .state_root = undefined,
             .body = types.BeamBlockBody{
                 // .execution_payload_header = .{ .timestamp = timestamp },
-                .attestations = attestations,
+                .attestations = blk: {
+                    var attestations_list = try types.Attestations.init(self.allocator);
+                    for (signed_attestations) |signed_attestation| {
+                        try attestations_list.append(signed_attestation.message);
+                    }
+                    break :blk attestations_list;
+                },
             },
         };
 
@@ -221,6 +231,13 @@ pub const BeamChain = struct {
         return .{
             .block = block,
             .blockRoot = block_root,
+            .signatures = blk: {
+                var signatures_list = try types.BlockSignatures.init(self.allocator);
+                for (signed_attestations) |signed_attestation| {
+                    try signatures_list.append(signed_attestation.signature);
+                }
+                break :blk signatures_list;
+            },
         };
     }
 
