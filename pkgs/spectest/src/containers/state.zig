@@ -446,17 +446,8 @@ test "test_generate_genesis" {
     var key_manager = try keymanager.getTestKeyManager(allocator, num_validators, 10);
     defer key_manager.deinit();
 
-    const pubkeys = try allocator.alloc(types.Bytes52, num_validators);
+    const pubkeys = try key_manager.getAllPubkeys(allocator, num_validators);
     defer allocator.free(pubkeys);
-
-    for (0..num_validators) |i| {
-        var validator_pubkey: types.Bytes52 = undefined;
-        const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
-        if (pubkey_size < validator_pubkey.len) {
-            @memset(validator_pubkey[pubkey_size..], 0);
-        }
-        pubkeys[i] = validator_pubkey;
-    }
 
     // Create genesis spec
     const genesis_spec = types.GenesisSpec{

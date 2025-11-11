@@ -72,6 +72,24 @@ pub const KeyManager = struct {
         const keypair = self.keys.get(validator_index) orelse return KeyManagerError.ValidatorKeyNotFound;
         return try keypair.pubkeyToBytes(buffer);
     }
+
+    /// Extract all validator public keys into an array
+    /// Caller owns the returned slice and must free it
+    pub fn getAllPubkeys(
+        self: *const Self,
+        allocator: Allocator,
+        num_validators: usize,
+    ) ![]types.Bytes52 {
+        const pubkeys = try allocator.alloc(types.Bytes52, num_validators);
+        errdefer allocator.free(pubkeys);
+
+        // XMSS public keys are always exactly 52 bytes
+        for (0..num_validators) |i| {
+            _ = try self.getPublicKeyBytes(i, &pubkeys[i]);
+        }
+
+        return pubkeys;
+    }
 };
 
 pub fn getTestKeyManager(

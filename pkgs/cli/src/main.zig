@@ -290,19 +290,14 @@ fn mainInner() !void {
             var key_manager = try key_manager_lib.getTestKeyManager(allocator, num_validators, 10000);
             defer key_manager.deinit();
 
-            // Extract validator pubkeys from keymanager
-            const pubkeys = try allocator.alloc(types.Bytes52, num_validators);
-            for (0..num_validators) |i| {
-                var validator_pubkey: types.Bytes52 = undefined;
-                const pubkey_size = try key_manager.getPublicKeyBytes(i, &validator_pubkey);
-                if (pubkey_size < validator_pubkey.len) {
-                    @memset(validator_pubkey[pubkey_size..], 0);
-                }
-                pubkeys[i] = validator_pubkey;
-            }
+            // Get validator pubkeys from keymanager
+            const pubkeys = try key_manager.getAllPubkeys(allocator, num_validators);
+            var owns_pubkeys = true;
+            defer if (owns_pubkeys) allocator.free(pubkeys);
 
             // Set validator_pubkeys in chain_options
             chain_options.validator_pubkeys = pubkeys;
+            owns_pubkeys = false; // ownership moved into genesis spec
 
             // transfer ownership of the chain_options to ChainConfig
             const chain_config = try ChainConfig.init(Chain.custom, chain_options);

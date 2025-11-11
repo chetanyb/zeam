@@ -44,6 +44,10 @@ test "apply transition on mocked chain" {
     for (1..mock_chain.blocks.len) |i| {
         // this is a signed block
         const signed_block = mock_chain.blocks[i];
+
+        // Verify signatures before applying state transition
+        try verifySignatures(allocator, &beam_state, &signed_block);
+
         try apply_transition(allocator, &beam_state, signed_block.message.block, .{ .logger = module_logger });
     }
 
