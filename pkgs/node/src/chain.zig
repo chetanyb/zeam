@@ -342,13 +342,13 @@ pub const BeamChain = struct {
 
                 // Validate attestation before processing (gossip = not from block)
                 self.validateAttestation(signed_attestation.message, false) catch |err| {
-                    self.module_logger.err("Gossip attestation validation failed: {any}", .{err});
+                    self.module_logger.debug("Gossip attestation validation failed: {any}", .{err});
                     return; // Drop invalid gossip attestations
                 };
 
                 // Process validated attestation
                 self.onAttestation(signed_attestation) catch |err| {
-                    self.module_logger.err("Attestation processing error: {any}", .{err});
+                    self.module_logger.debug("Attestation processing error: {any}", .{err});
                     return err;
                 };
             },
@@ -508,21 +508,21 @@ pub const BeamChain = struct {
 
         // 1. Validate that source, target, and head blocks exist in proto array
         const source_idx = self.forkChoice.protoArray.indices.get(data.source.root) orelse {
-            self.module_logger.err("Attestation validation failed: unknown source block root=0x{s}", .{
+            self.module_logger.debug("Attestation validation failed: unknown source block root=0x{s}", .{
                 std.fmt.fmtSliceHexLower(&data.source.root),
             });
             return AttestationValidationError.UnknownSourceBlock;
         };
 
         const target_idx = self.forkChoice.protoArray.indices.get(data.target.root) orelse {
-            self.module_logger.err("Attestation validation failed: unknown target block root=0x{s}", .{
+            self.module_logger.debug("Attestation validation failed: unknown target block root=0x{s}", .{
                 std.fmt.fmtSliceHexLower(&data.target.root),
             });
             return AttestationValidationError.UnknownTargetBlock;
         };
 
         const head_idx = self.forkChoice.protoArray.indices.get(data.head.root) orelse {
-            self.module_logger.err("Attestation validation failed: unknown head block root=0x{s}", .{
+            self.module_logger.debug("Attestation validation failed: unknown head block root=0x{s}", .{
                 std.fmt.fmtSliceHexLower(&data.head.root),
             });
             return AttestationValidationError.UnknownHeadBlock;
@@ -535,7 +535,7 @@ pub const BeamChain = struct {
 
         // 2. Validate slot relationships
         if (source_block.slot > target_block.slot) {
-            self.module_logger.err("Attestation validation failed: source slot {d} > target slot {d}", .{
+            self.module_logger.debug("Attestation validation failed: source slot {d} > target slot {d}", .{
                 source_block.slot,
                 target_block.slot,
             });
@@ -544,7 +544,7 @@ pub const BeamChain = struct {
 
         //    This corresponds to leanSpec's: assert attestation.source.slot <= attestation.target.slot
         if (data.source.slot > data.target.slot) {
-            self.module_logger.err("Attestation validation failed: source checkpoint slot {d} > target checkpoint slot {d}", .{
+            self.module_logger.debug("Attestation validation failed: source checkpoint slot {d} > target checkpoint slot {d}", .{
                 data.source.slot,
                 data.target.slot,
             });
@@ -553,7 +553,7 @@ pub const BeamChain = struct {
 
         // 3. Validate checkpoint slots match block slots
         if (source_block.slot != data.source.slot) {
-            self.module_logger.err("Attestation validation failed: source block slot {d} != source checkpoint slot {d}", .{
+            self.module_logger.debug("Attestation validation failed: source block slot {d} != source checkpoint slot {d}", .{
                 source_block.slot,
                 data.source.slot,
             });
@@ -562,7 +562,7 @@ pub const BeamChain = struct {
 
         //    This corresponds to leanSpec's: assert target_block.slot == attestation.target.slot
         if (target_block.slot != data.target.slot) {
-            self.module_logger.err("Attestation validation failed: target block slot {d} != target checkpoint slot {d}", .{
+            self.module_logger.debug("Attestation validation failed: target block slot {d} != target checkpoint slot {d}", .{
                 target_block.slot,
                 data.target.slot,
             });
@@ -581,7 +581,7 @@ pub const BeamChain = struct {
             current_slot; // Gossip attestations: no future slots allowed
 
         if (data.slot > max_allowed_slot) {
-            self.module_logger.err("Attestation validation failed: attestation slot {d} > max allowed slot {d} (is_from_block={any})", .{
+            self.module_logger.debug("Attestation validation failed: attestation slot {d} > max allowed slot {d} (is_from_block={any})", .{
                 data.slot,
                 max_allowed_slot,
                 is_from_block,
