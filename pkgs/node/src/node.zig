@@ -352,6 +352,14 @@ pub const BeamNode = struct {
     pub fn onInterval(ptr: *anyopaque, itime_intervals: isize) !void {
         const self: *Self = @ptrCast(@alignCast(ptr));
 
+        // TODO check & fix why node-n1 is getting two oninterval fires in beam sim
+        if (itime_intervals <= self.chain.forkChoice.fcStore.time) {
+            self.logger.warn("Skipping onInterval for node ad chain is already ahead at time={d} of the misfired interval time={d}", .{
+                self.chain.forkChoice.fcStore.time,
+                itime_intervals,
+            });
+        }
+
         // till its time to attest atleast for first time don't run onInterval,
         // just print chain status i.e avoid zero slot zero interval block production
         if (itime_intervals < 1) {
