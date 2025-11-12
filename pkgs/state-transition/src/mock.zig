@@ -23,7 +23,7 @@ const MockChainData = struct {
     finalization: []bool,
 
     pub fn deinit(self: *MockChainData, allocator: Allocator) void {
-        self.genesis_state.deinit(allocator);
+        self.genesis_state.deinit();
         for (self.blocks) |*b| {
             b.deinit(allocator);
         }
