@@ -321,36 +321,90 @@ pub const Node = struct {
                 return error.HashSigValidatorIndexOutOfRange;
             }
 
-            const pk_path = try std.fmt.allocPrint(self.allocator, "{s}/validator_{d}_pk.json", .{ hash_sig_key_dir, validator_index });
-            defer self.allocator.free(pk_path);
-
-            var pk_file = std.fs.cwd().openFile(pk_path, .{}) catch |err| switch (err) {
-                error.FileNotFound => return error.HashSigPublicKeyMissing,
-                else => return err,
+            // Helper to read a key file
+            const ReadKeyArgs = struct {
+                dir: []const u8,
+                index: usize,
+                suffix: []const u8,
+                allocator: std.mem.Allocator,
             };
-            defer pk_file.close();
-            const public_json = try pk_file.readToEndAlloc(self.allocator, constants.MAX_HASH_SIG_KEY_JSON_SIZE);
-            defer self.allocator.free(public_json);
+            const readKeyFile = struct {
+                fn read(args: ReadKeyArgs) ![]u8 {
+                    const path = try std.fmt.allocPrint(args.allocator, "{s}/validator_{d}_{s}", .{ args.dir, args.index, args.suffix });
+                    defer args.allocator.free(path);
 
-            const sk_path = try std.fmt.allocPrint(self.allocator, "{s}/validator_{d}_sk.json", .{ hash_sig_key_dir, validator_index });
-            defer self.allocator.free(sk_path);
+                    var file = std.fs.cwd().openFile(path, .{}) catch |err| switch (err) {
+                        error.FileNotFound => return error.FileNotFound,
+                        else => return err,
+                    };
+                    defer file.close();
 
-            var sk_file = std.fs.cwd().openFile(sk_path, .{}) catch |err| switch (err) {
-                error.FileNotFound => return error.HashSigSecretKeyMissing,
+                    return try file.readToEndAlloc(args.allocator, constants.MAX_HASH_SIG_ENCODED_KEY_SIZE);
+                }
+            }.read;
+
+            // Try loading SSZ keys first
+            if (readKeyFile(.{
+                .dir = hash_sig_key_dir,
+                .index = validator_index,
+                .suffix = "sk.ssz",
+                .allocator = self.allocator,
+            })) |secret_ssz| {
+                defer self.allocator.free(secret_ssz);
+
+                const public_ssz = readKeyFile(.{
+                    .dir = hash_sig_key_dir,
+                    .index = validator_index,
+                    .suffix = "pk.ssz",
+                    .allocator = self.allocator,
+                }) catch |err| switch (err) {
+                    error.FileNotFound => return error.HashSigPublicKeyMissing,
+                    else => return err,
+                };
+                defer self.allocator.free(public_ssz);
+
+                var keypair = try xmss.KeyPair.fromSsz(
+                    self.allocator,
+                    secret_ssz,
+                    public_ssz,
+                );
+                errdefer keypair.deinit();
+                try self.key_manager.addKeypair(validator_index, keypair);
+            } else |err| switch (err) {
+                error.FileNotFound => {
+                    // Fallback to JSON if SSZ secret key is missing
+                    const secret_json = readKeyFile(.{
+                        .dir = hash_sig_key_dir,
+                        .index = validator_index,
+                        .suffix = "sk.json",
+                        .allocator = self.allocator,
+                    }) catch |e| switch (e) {
+                        error.FileNotFound => return error.HashSigSecretKeyMissing,
+                        else => return e,
+                    };
+                    defer self.allocator.free(secret_json);
+
+                    const public_json = readKeyFile(.{
+                        .dir = hash_sig_key_dir,
+                        .index = validator_index,
+                        .suffix = "pk.json",
+                        .allocator = self.allocator,
+                    }) catch |e| switch (e) {
+                        error.FileNotFound => return error.HashSigPublicKeyMissing,
+                        else => return e,
+                    };
+                    defer self.allocator.free(public_json);
+
+                    var keypair = try xmss.KeyPair.fromJson(
+                        self.allocator,
+                        secret_json,
+                        public_json,
+                    );
+                    errdefer keypair.deinit();
+                    try self.key_manager.addKeypair(validator_index, keypair);
+                },
                 else => return err,
-            };
-            defer sk_file.close();
-            const secret_json = try sk_file.readToEndAlloc(self.allocator, constants.MAX_HASH_SIG_KEY_JSON_SIZE);
-            defer self.allocator.free(secret_json);
-
-            var keypair = try xmss.KeyPair.fromJson(
-                self.allocator,
-                secret_json,
-                public_json,
-            );
-            errdefer keypair.deinit();
-
-            try self.key_manager.addKeypair(validator_index, keypair);
+            }
         }
     }
 };
