@@ -40,6 +40,12 @@ const Metrics = struct {
     lean_state_transition_attestations_processed_total: AttestationsProcessedCounter,
     lean_state_transition_attestations_processing_time_seconds: AttestationsProcessingHistogram,
     lean_validators_count: LeanValidatorsCountGauge,
+    lean_fork_choice_block_processing_time_seconds: ForkChoiceBlockProcessingTimeHistogram,
+    lean_attestations_valid_total: ForkChoiceAttestationsValidLabeledCounter,
+    lean_attestations_invalid_total: ForkChoiceAttestationsInvalidLabeledCounter,
+    lean_attestation_validation_time_seconds: ForkChoiceAttestationValidationTimeHistogram,
+    lean_pq_signature_attestation_signing_time_seconds: PQSignatureSigningHistogram,
+    lean_pq_signature_attestation_verification_time_seconds: PQSignatureVerificationHistogram,
 
     const ChainHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 });
     const BlockProcessingHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 });
@@ -47,12 +53,18 @@ const Metrics = struct {
     const SlotsProcessingHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 1 });
     const BlockProcessingTimeHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 1 });
     const AttestationsProcessingHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 1 });
+    const PQSignatureSigningHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 1 });
+    const PQSignatureVerificationHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 1 });
     const LeanHeadSlotGauge = metrics_lib.Gauge(u64);
     const LeanLatestJustifiedSlotGauge = metrics_lib.Gauge(u64);
     const LeanLatestFinalizedSlotGauge = metrics_lib.Gauge(u64);
     const SlotsProcessedCounter = metrics_lib.Counter(u64);
     const AttestationsProcessedCounter = metrics_lib.Counter(u64);
     const LeanValidatorsCountGauge = metrics_lib.Gauge(u64);
+    const ForkChoiceBlockProcessingTimeHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 1 });
+    const ForkChoiceAttestationsValidLabeledCounter = metrics_lib.CounterVec(u64, struct { source: []const u8 });
+    const ForkChoiceAttestationsInvalidLabeledCounter = metrics_lib.CounterVec(u64, struct { source: []const u8 });
+    const ForkChoiceAttestationValidationTimeHistogram = metrics_lib.Histogram(f32, &[_]f32{ 0.005, 0.01, 0.025, 0.05, 0.1, 1 });
 };
 
 /// Timer struct returned to the application.
@@ -125,6 +137,50 @@ fn observeAttestationsProcessing(ctx: ?*anyopaque, value: f32) void {
     histogram.observe(value);
 }
 
+fn observeFCBlockProcessingTimeHistogram(ctx: ?*anyopaque, value: f32) void {
+    const histogram_ptr = ctx orelse return; // No-op if not initialized
+    const histogram: *Metrics.ForkChoiceBlockProcessingTimeHistogram = @ptrCast(@alignCast(histogram_ptr));
+    histogram.observe(value);
+}
+
+fn observeFCAttestationValidationTimeHistogram(ctx: ?*anyopaque, value: f32) void {
+    const histogram_ptr = ctx orelse return; // No-op if not initialized
+    const histogram: *Metrics.ForkChoiceAttestationValidationTimeHistogram = @ptrCast(@alignCast(histogram_ptr));
+    histogram.observe(value);
+}
+
+/// Increments the lean_attestations_valid_total counter with appropriate label
+pub fn incrementLeanAttestationsValid(is_from_block: bool) void {
+    if (!g_initialized or isZKVM()) return;
+
+    const source_label = if (is_from_block) "block" else "gossip";
+    metrics.lean_attestations_valid_total.incr(.{ .source = source_label }) catch |err| {
+        std.log.warn("Failed to increment valid attestations metric: {any}", .{err});
+    };
+}
+
+/// Updated function to handle labeled invalid attestations
+pub fn incrementLeanAttestationsInvalid(is_from_block: bool) void {
+    if (!g_initialized or isZKVM()) return;
+
+    const source_label = if (is_from_block) "block" else "gossip";
+    metrics.lean_attestations_invalid_total.incr(.{ .source = source_label }) catch |err| {
+        std.log.warn("Failed to increment invalid attestations metric: {any}", .{err});
+    };
+}
+
+fn observePQSignatureAttestationSigning(ctx: ?*anyopaque, value: f32) void {
+    const histogram_ptr = ctx orelse return; // No-op if not initialized
+    const histogram: *Metrics.PQSignatureSigningHistogram = @ptrCast(@alignCast(histogram_ptr));
+    histogram.observe(value);
+}
+
+fn observePQSignatureAttestationVerification(ctx: ?*anyopaque, value: f32) void {
+    const histogram_ptr = ctx orelse return; // No-op if not initialized
+    const histogram: *Metrics.PQSignatureVerificationHistogram = @ptrCast(@alignCast(histogram_ptr));
+    histogram.observe(value);
+}
+
 /// The public variables the application interacts with.
 /// Calling `.start()` on these will start a new timer.
 pub var chain_onblock_duration_seconds: Histogram = .{
@@ -151,10 +207,26 @@ pub var lean_state_transition_attestations_processing_time_seconds: Histogram = 
     .context = null,
     .observe = &observeAttestationsProcessing,
 };
+pub var lean_fork_choice_block_processing_time_seconds: Histogram = .{
+    .context = null,
+    .observe = &observeFCBlockProcessingTimeHistogram,
+};
+
+pub var lean_attestation_validation_time_seconds: Histogram = .{
+    .context = null,
+    .observe = &observeFCAttestationValidationTimeHistogram,
+};
+pub var lean_pq_signature_attestation_signing_time_seconds: Histogram = .{
+    .context = null,
+    .observe = &observePQSignatureAttestationSigning,
+};
+pub var lean_pq_signature_attestation_verification_time_seconds: Histogram = .{
+    .context = null,
+    .observe = &observePQSignatureAttestationVerification,
+};
 
 /// Initializes the metrics system. Must be called once at startup.
 pub fn init(allocator: std.mem.Allocator) !void {
-    _ = allocator; // Not needed for basic histograms
     if (g_initialized) return;
 
     // For ZKVM targets, use no-op metrics
@@ -177,6 +249,12 @@ pub fn init(allocator: std.mem.Allocator) !void {
         .lean_state_transition_attestations_processed_total = Metrics.AttestationsProcessedCounter.init("lean_state_transition_attestations_processed_total", .{ .help = "Total number of processed attestations." }, .{}),
         .lean_state_transition_attestations_processing_time_seconds = Metrics.AttestationsProcessingHistogram.init("lean_state_transition_attestations_processing_time_seconds", .{ .help = "Time taken to process attestations." }, .{}),
         .lean_validators_count = Metrics.LeanValidatorsCountGauge.init("lean_validators_count", .{ .help = "Number of connected validators." }, .{}),
+        .lean_fork_choice_block_processing_time_seconds = Metrics.ForkChoiceBlockProcessingTimeHistogram.init("lean_fork_choice_block_processing_time_seconds", .{ .help = "Time taken to process block in fork choice." }, .{}),
+        .lean_attestations_valid_total = try Metrics.ForkChoiceAttestationsValidLabeledCounter.init(allocator, "lean_attestations_valid_total", .{ .help = "Total number of valid attestations labeled by source (gossip or block)." }, .{}),
+        .lean_attestations_invalid_total = try Metrics.ForkChoiceAttestationsInvalidLabeledCounter.init(allocator, "lean_attestations_invalid_total", .{ .help = "Total number of invalid attestations labeled by source (gossip or block)." }, .{}),
+        .lean_attestation_validation_time_seconds = Metrics.ForkChoiceAttestationValidationTimeHistogram.init("lean_attestation_validation_time_seconds", .{ .help = "Time taken to validate attestation." }, .{}),
+        .lean_pq_signature_attestation_signing_time_seconds = Metrics.PQSignatureSigningHistogram.init("lean_pq_signature_attestation_signing_time_seconds", .{ .help = "Time taken to sign an attestation." }, .{}),
+        .lean_pq_signature_attestation_verification_time_seconds = Metrics.PQSignatureVerificationHistogram.init("lean_pq_signature_attestation_verification_time_seconds", .{ .help = "Time taken to verify an attestation signature." }, .{}),
     };
 
     // Set context for histogram wrappers (observe functions already assigned at compile time)
@@ -186,6 +264,10 @@ pub fn init(allocator: std.mem.Allocator) !void {
     lean_state_transition_slots_processing_time_seconds.context = @ptrCast(&metrics.lean_state_transition_slots_processing_time_seconds);
     lean_state_transition_block_processing_time_seconds.context = @ptrCast(&metrics.lean_state_transition_block_processing_time_seconds);
     lean_state_transition_attestations_processing_time_seconds.context = @ptrCast(&metrics.lean_state_transition_attestations_processing_time_seconds);
+    lean_fork_choice_block_processing_time_seconds.context = @ptrCast(&metrics.lean_fork_choice_block_processing_time_seconds);
+    lean_attestation_validation_time_seconds.context = @ptrCast(&metrics.lean_attestation_validation_time_seconds);
+    lean_pq_signature_attestation_signing_time_seconds.context = @ptrCast(&metrics.lean_pq_signature_attestation_signing_time_seconds);
+    lean_pq_signature_attestation_verification_time_seconds.context = @ptrCast(&metrics.lean_pq_signature_attestation_verification_time_seconds);
 
     g_initialized = true;
 }
