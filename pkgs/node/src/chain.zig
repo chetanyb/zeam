@@ -75,8 +75,8 @@ pub const BeamChain = struct {
     registered_validator_ids: []usize = &[_]usize{},
     db: database.Db,
     // Track last-emitted checkpoints to avoid duplicate SSE events (e.g., genesis spam)
-    last_emitted_justified_slot: u64 = 0,
-    last_emitted_finalized_slot: u64 = 0,
+    last_emitted_justified: types.Checkpoint,
+    last_emitted_finalized: types.Checkpoint,
     connected_peers: *const std.StringHashMap(PeerInfo),
     node_registry: *const NodeNameRegistry,
 
@@ -111,8 +111,8 @@ pub const BeamChain = struct {
             .stf_logger = logger_config.logger(.state_transition),
             .block_building_logger = logger_config.logger(.state_transition_block_building),
             .db = opts.db,
-            .last_emitted_justified_slot = 0,
-            .last_emitted_finalized_slot = 0,
+            .last_emitted_justified = fork_choice.fcStore.latest_justified,
+            .last_emitted_finalized = fork_choice.fcStore.latest_finalized,
             .connected_peers = connected_peers,
             .node_registry = opts.node_registry,
         };
@@ -153,7 +153,7 @@ pub const BeamChain = struct {
             }
         }
 
-        self.module_logger.debug("Ticking chain to time(intervals)={d} = slot={d} interval={d} has_proposal={} ", .{
+        self.module_logger.debug("ticking chain to time(intervals)={d} = slot={d} interval={d} has_proposal={} ", .{
             time_intervals,
             slot,
             interval,
@@ -166,6 +166,56 @@ pub const BeamChain = struct {
             // latest head which most likely should be the new block received and processed
             const islot: isize = @intCast(slot);
             self.printSlot(islot, self.connected_peers.count());
+
+            // Periodic pruning: prune old non-canonical states every N slots
+            // This ensures we prune even when finalization doesn't advance
+            if (slot > 0 and slot % constants.FORKCHOICE_PRUNING_INTERVAL_SLOTS == 0) {
+                const finalized = self.forkChoice.fcStore.latest_finalized;
+                // no need to work extra if finalization is not far behind
+                if (finalized.slot + 2 * constants.FORKCHOICE_PRUNING_INTERVAL_SLOTS < slot) {
+                    self.module_logger.warn("finalization slot={d} too far behind the current slot={d}", .{ finalized.slot, slot });
+                    const pruningAnchor = try self.forkChoice.getCanonicalAncestorAtDepth(constants.FORKCHOICE_PRUNING_INTERVAL_SLOTS);
+
+                    // prune if finalization hasn't happened since a long time
+                    if (pruningAnchor.slot > finalized.slot) {
+                        self.module_logger.info("periodic pruning triggered at slot {d} (finalized slot={d} pruning anchor={d})", .{
+                            slot,
+                            finalized.slot,
+                            pruningAnchor.slot,
+                        });
+                        const analysis_result = try self.forkChoice.getCanonicalityAnalysis(self.allocator, pruningAnchor.blockRoot, finalized.root);
+                        const depth_confirmed_roots = analysis_result[0];
+                        const non_finalized_descendants = analysis_result[1];
+                        const non_canonical_roots = analysis_result[2];
+                        defer self.allocator.free(depth_confirmed_roots);
+                        defer self.allocator.free(non_finalized_descendants);
+                        defer self.allocator.free(non_canonical_roots);
+
+                        const states_count_before: isize = self.states.count();
+                        _ = self.pruneStates(depth_confirmed_roots[1..depth_confirmed_roots.len], "confirmed ancestors");
+                        _ = self.pruneStates(non_canonical_roots, "confirmed non canonical");
+                        const pruned_count = states_count_before - self.states.count();
+                        self.module_logger.info("pruned states={d} at slot={d} (finalized slot={d} pruning anchor={d})", .{
+                            //
+                            pruned_count,
+                            slot,
+                            finalized.slot,
+                            pruningAnchor.slot,
+                        });
+                    } else {
+                        self.module_logger.info("skipping periodic pruning at slot={d} since finalization not behind pruning anchor (finalized slot={d} pruning anchor={d})", .{
+                            slot,
+                            finalized.slot,
+                            pruningAnchor.slot,
+                        });
+                    }
+                } else {
+                    self.module_logger.info("skipping periodic pruning at current slot={d} since finalization slot={d} not behind", .{
+                        slot,
+                        finalized.slot,
+                    });
+                }
+            }
         }
         // check if log rotation is needed
         self.zeam_logger_config.maybeRotate() catch |err| {
@@ -291,6 +341,10 @@ pub const BeamChain = struct {
         const slot: usize = if (islot < 0) 0 else @intCast(islot);
         const blocks_behind = if (slot > fc_head.slot) slot - fc_head.slot else 0;
         const is_timely = fc_head.timeliness;
+
+        const states_count = self.states.count();
+
+        self.module_logger.debug("Cached States: {d}", .{states_count});
 
         self.module_logger.info(
             \\
@@ -495,11 +549,11 @@ pub const BeamChain = struct {
         if (api.events.NewHeadEvent.fromProtoBlock(self.allocator, new_head)) |head_event| {
             var chain_event = api.events.ChainEvent{ .new_head = head_event };
             event_broadcaster.broadcastGlobalEvent(&chain_event) catch |err| {
-                self.module_logger.warn("Failed to broadcast head event: {any}", .{err});
+                self.module_logger.warn("failed to broadcast head event: {any}", .{err});
                 chain_event.deinit(self.allocator);
             };
         } else |err| {
-            self.module_logger.warn("Failed to create head event: {any}", .{err});
+            self.module_logger.warn("failed to create head event: {any}", .{err});
         }
 
         const store = self.forkChoice.fcStore;
@@ -507,8 +561,8 @@ pub const BeamChain = struct {
         const latest_finalized = store.latest_finalized;
 
         // 7. Save block and state to database
-        self.updateBlockDb(signedBlock, fcBlock.blockRoot, post_state.*, block.slot, latest_finalized.slot) catch |err| {
-            self.module_logger.err("Failed to update block database for block root=0x{s}: {any}", .{
+        self.updateBlockDb(signedBlock, fcBlock.blockRoot, post_state.*, block.slot, latest_finalized) catch |err| {
+            self.module_logger.err("failed to update block database for block root=0x{s}: {any}", .{
                 std.fmt.fmtSliceHexLower(&fcBlock.blockRoot),
                 err,
             });
@@ -516,39 +570,41 @@ pub const BeamChain = struct {
 
         // 8. Emit justification/finalization events based on forkchoice store
         // Emit justification event only when slot increases beyond last emitted
-        if (latest_justified.slot > self.last_emitted_justified_slot) {
+        if (latest_justified.slot > self.last_emitted_justified.slot) {
             if (api.events.NewJustificationEvent.fromCheckpoint(self.allocator, latest_justified, new_head.slot)) |just_event| {
                 var chain_event = api.events.ChainEvent{ .new_justification = just_event };
                 event_broadcaster.broadcastGlobalEvent(&chain_event) catch |err| {
-                    self.module_logger.warn("Failed to broadcast justification event: {any}", .{err});
+                    self.module_logger.warn("failed to broadcast justification event: {any}", .{err});
                     chain_event.deinit(self.allocator);
                 };
-                self.last_emitted_justified_slot = latest_justified.slot;
+                self.last_emitted_justified = latest_justified;
             } else |err| {
-                self.module_logger.warn("Failed to create justification event: {any}", .{err});
+                self.module_logger.warn("failed to create justification event: {any}", .{err});
             }
         }
 
         // Emit finalization event only when slot increases beyond last emitted
-        if (latest_finalized.slot > self.last_emitted_finalized_slot) {
+        if (latest_finalized.slot > self.last_emitted_finalized.slot) {
             if (api.events.NewFinalizationEvent.fromCheckpoint(self.allocator, latest_finalized, new_head.slot)) |final_event| {
                 var chain_event = api.events.ChainEvent{ .new_finalization = final_event };
                 event_broadcaster.broadcastGlobalEvent(&chain_event) catch |err| {
-                    self.module_logger.warn("Failed to broadcast finalization event: {any}", .{err});
+                    self.module_logger.warn("failed to broadcast finalization event: {any}", .{err});
                     chain_event.deinit(self.allocator);
                 };
-                self.last_emitted_finalized_slot = latest_finalized.slot;
+                self.last_emitted_finalized = latest_finalized;
             } else |err| {
-                self.module_logger.warn("Failed to create finalization event: {any}", .{err});
+                self.module_logger.warn("failed to create finalization event: {any}", .{err});
             }
         }
 
-        self.module_logger.info("processed block with root=0x{s} slot={d} processing time={d} (computed root={} computed state={})", .{
+        const states_count_after_block = self.states.count();
+        self.module_logger.info("processed block with root=0x{s} slot={d} processing time={d} (computed root={} computed state={}) states_count={d}", .{
             std.fmt.fmtSliceHexLower(&fcBlock.blockRoot),
             block.slot,
             processing_time,
             blockInfo.blockRoot == null,
             blockInfo.postState == null,
+            states_count_after_block,
         });
 
         zeam_metrics.metrics.lean_latest_justified_slot.set(latest_justified.slot);
@@ -558,7 +614,7 @@ pub const BeamChain = struct {
     }
 
     /// Update block database with block, state, and slot indices
-    fn updateBlockDb(self: *Self, signedBlock: types.SignedBlockWithAttestation, blockRoot: types.Root, postState: types.BeamState, slot: types.Slot, finalizedSlot: types.Slot) !void {
+    fn updateBlockDb(self: *Self, signedBlock: types.SignedBlockWithAttestation, blockRoot: types.Root, postState: types.BeamState, slot: types.Slot, latestFinalized: types.Checkpoint) !void {
         var batch = self.db.initWriteBatch();
         defer batch.deinit();
 
@@ -585,11 +641,11 @@ pub const BeamChain = struct {
         // }
 
         // Update finalized slot indices and cleanup if finalization has advanced
-        if (finalizedSlot > self.last_emitted_finalized_slot) {
-            self.processFinalizationAdvancement(&batch, self.last_emitted_finalized_slot, finalizedSlot) catch |err| {
+        if (latestFinalized.slot > self.last_emitted_finalized.slot) {
+            self.processFinalizationAdvancement(&batch, self.last_emitted_finalized, latestFinalized) catch |err| {
                 self.module_logger.err("Failed to process finalization advancement from slot {d} to {d}: {any}", .{
-                    self.last_emitted_finalized_slot,
-                    finalizedSlot,
+                    self.last_emitted_finalized.slot,
+                    latestFinalized.slot,
                     err,
                 });
             };
@@ -598,39 +654,92 @@ pub const BeamChain = struct {
         self.db.commit(&batch);
     }
 
-    /// Process finalization advancement: move canonical blocks to finalized index and cleanup unfinalized indices
-    fn processFinalizationAdvancement(self: *Self, batch: *database.Db.WriteBatch, previousFinalizedSlot: types.Slot, finalizedSlot: types.Slot) !void {
-        // 1. Fetch all newly finalized roots
-        const current_finalized = self.forkChoice.fcStore.latest_finalized.root;
-
-        const newly_finalized_roots = try self.forkChoice.getAncestorsOfFinalized(self.allocator, current_finalized, previousFinalizedSlot);
-        defer self.allocator.free(newly_finalized_roots);
-
-        self.module_logger.info("Finalization advanced to slot {d}, found {d} newly finalized blocks", .{
-            finalizedSlot,
-            newly_finalized_roots.len,
+    /// Prune old non-canonical states from memory
+    /// canonical_blocks: set of block roots that should be kept (e.g., canonical chain from finalized to head)
+    ///                    All states in canonical_blocks are kept, all others are pruned
+    fn pruneStates(self: *Self, roots: []types.Root, pruneType: []const u8) usize {
+        const states_count_before = self.states.count();
+        self.module_logger.debug("pruning for {s} (states_count={d}, roots={d})", .{
+            pruneType,
+            states_count_before,
+            roots.len,
         });
 
-        var canonical_blocks = std.AutoHashMap(types.Root, void).init(self.allocator);
-        defer canonical_blocks.deinit();
-
-        for (newly_finalized_roots) |root| {
-            canonical_blocks.put(root, {}) catch {};
+        // We keep the canonical chain from finalized to head, so we can safely prune all non-canonical states
+        // Actually remove and deallocate the pruned states
+        for (roots) |root| {
+            if (self.states.fetchRemove(root)) |entry| {
+                const state_ptr = entry.value;
+                state_ptr.deinit();
+                self.allocator.destroy(state_ptr);
+                self.module_logger.debug("pruned state for root 0x{s}", .{
+                    std.fmt.fmtSliceHexLower(&root),
+                });
+            }
         }
 
+        const states_count_after = self.states.count();
+        const pruned_count = states_count_before - states_count_after;
+        self.module_logger.debug("pruning completed for {s} removed {d} states (states: {d} -> {d})", .{
+            pruneType,
+            pruned_count,
+            states_count_before,
+            states_count_after,
+        });
+        return pruned_count;
+    }
+
+    /// Process finalization advancement: move canonical blocks to finalized index and cleanup unfinalized indices
+    fn processFinalizationAdvancement(self: *Self, batch: *database.Db.WriteBatch, previousFinalized: types.Checkpoint, latestFinalized: types.Checkpoint) !void {
+        self.module_logger.debug("processing finalization advancement from slot={d} to slot={d}", .{ previousFinalized.slot, latestFinalized.slot });
+
+        // 1. Fetch all newly finalized roots
+        const analysis_result = try self.forkChoice.getCanonicalityAnalysis(self.allocator, latestFinalized.root, previousFinalized.root);
+        const finalized_roots = analysis_result[0];
+        const non_finalized_descendants = analysis_result[1];
+        const non_canonical_roots = analysis_result[2];
+        defer self.allocator.free(finalized_roots);
+        defer self.allocator.free(non_finalized_descendants);
+        defer self.allocator.free(non_canonical_roots);
+
+        // finalized_ancestor_roots has the previous finalized included
+        const newly_finalized_count = finalized_roots.len - 1;
+        self.module_logger.info("finalization canonicality analysis (previousFinalized slot={d} to latestFinalized slot={d}): newly finalized={d}, orphaned/missing={d}, non finalized descendants={d} & finalized non canonical={d}", .{
+            previousFinalized.slot,
+            //
+            latestFinalized.slot,
+            newly_finalized_count,
+            latestFinalized.slot - previousFinalized.slot - newly_finalized_count,
+            non_finalized_descendants.len,
+            non_canonical_roots.len,
+        });
+
         // 2. Put all newly finalized roots in DbFinalizedSlotsNamespace
-        for (newly_finalized_roots) |root| {
+        for (finalized_roots) |root| {
             const idx = self.forkChoice.protoArray.indices.get(root) orelse return error.FinalizedBlockNotInForkChoice;
             const node = self.forkChoice.protoArray.nodes.items[idx];
             batch.putFinalizedSlotIndex(database.DbFinalizedSlotsNamespace, node.slot, root);
-            self.module_logger.debug("Added block 0x{s} at slot {d} to finalized index", .{
+            self.module_logger.debug("added block 0x{s} at slot {d} to finalized index", .{
                 std.fmt.fmtSliceHexLower(&root),
                 node.slot,
             });
         }
 
+        // 3. Prunestates from memory
+        // Get all canonical blocks from finalized to head (not just newly finalized)
+        const states_count_before: isize = self.states.count();
+        // first root is the new finalized, we need to retain it and will be pruned in the next round
+        _ = self.pruneStates(finalized_roots[1..finalized_roots.len], "finalized ancestors");
+        _ = self.pruneStates(non_canonical_roots, "finalized non canonical");
+        const pruned_count = states_count_before - self.states.count();
+        self.module_logger.info("state pruning completed (slots latestFinalized={d} to latestFinalized={d}) removed {d} states", .{
+            previousFinalized.slot,
+            latestFinalized.slot,
+            pruned_count,
+        });
+
         // TODO: uncomment this code if there is a need of slot to unfinalized index
-        // 3. Remove orphaned blocks from database and cleanup unfinalized indices
+        // 4. Remove orphaned blocks from database and cleanup unfinalized indices
         // for (previousFinalizedSlot + 1..finalizedSlot + 1) |slot| {
         //     var slot_orphaned_count: usize = 0;
         //     // Get all unfinalized blocks at this slot before deleting the index
@@ -658,10 +767,7 @@ pub const BeamChain = struct {
         //     }
         // }
 
-        self.module_logger.info("Finalization cleanup completed for slots {d} to {d}", .{
-            previousFinalizedSlot,
-            finalizedSlot,
-        });
+        self.module_logger.debug("finalization advanced  previousFinalized slot={d} to latestFinalized slot={d}", .{ previousFinalized.slot, latestFinalized.slot });
     }
 
     pub fn validateBlock(self: *Self, block: types.BeamBlock, is_from_gossip: bool) !void {
@@ -692,21 +798,21 @@ pub const BeamChain = struct {
 
         // 1. Validate that source, target, and head blocks exist in proto array
         const source_idx = self.forkChoice.protoArray.indices.get(data.source.root) orelse {
-            self.module_logger.debug("Attestation validation failed: unknown source block root=0x{s}", .{
+            self.module_logger.debug("attestation validation failed: unknown source block root=0x{s}", .{
                 std.fmt.fmtSliceHexLower(&data.source.root),
             });
             return AttestationValidationError.UnknownSourceBlock;
         };
 
         const target_idx = self.forkChoice.protoArray.indices.get(data.target.root) orelse {
-            self.module_logger.debug("Attestation validation failed: unknown target block root=0x{s}", .{
+            self.module_logger.debug("attestation validation failed: unknown target block root=0x{s}", .{
                 std.fmt.fmtSliceHexLower(&data.target.root),
             });
             return AttestationValidationError.UnknownTargetBlock;
         };
 
         const head_idx = self.forkChoice.protoArray.indices.get(data.head.root) orelse {
-            self.module_logger.debug("Attestation validation failed: unknown head block root=0x{s}", .{
+            self.module_logger.debug("attestation validation failed: unknown head block root=0x{s}", .{
                 std.fmt.fmtSliceHexLower(&data.head.root),
             });
             return AttestationValidationError.UnknownHeadBlock;
@@ -719,7 +825,7 @@ pub const BeamChain = struct {
 
         // 2. Validate slot relationships
         if (source_block.slot > target_block.slot) {
-            self.module_logger.debug("Attestation validation failed: source slot {d} > target slot {d}", .{
+            self.module_logger.debug("attestation validation failed: source slot {d} > target slot {d}", .{
                 source_block.slot,
                 target_block.slot,
             });
@@ -728,7 +834,7 @@ pub const BeamChain = struct {
 
         //    This corresponds to leanSpec's: assert attestation.source.slot <= attestation.target.slot
         if (data.source.slot > data.target.slot) {
-            self.module_logger.debug("Attestation validation failed: source checkpoint slot {d} > target checkpoint slot {d}", .{
+            self.module_logger.debug("attestation validation failed: source checkpoint slot {d} > target checkpoint slot {d}", .{
                 data.source.slot,
                 data.target.slot,
             });
@@ -737,7 +843,7 @@ pub const BeamChain = struct {
 
         // 3. Validate checkpoint slots match block slots
         if (source_block.slot != data.source.slot) {
-            self.module_logger.debug("Attestation validation failed: source block slot {d} != source checkpoint slot {d}", .{
+            self.module_logger.debug("attestation validation failed: source block slot {d} != source checkpoint slot {d}", .{
                 source_block.slot,
                 data.source.slot,
             });
@@ -746,7 +852,7 @@ pub const BeamChain = struct {
 
         //    This corresponds to leanSpec's: assert target_block.slot == attestation.target.slot
         if (target_block.slot != data.target.slot) {
-            self.module_logger.debug("Attestation validation failed: target block slot {d} != target checkpoint slot {d}", .{
+            self.module_logger.debug("attestation validation failed: target block slot {d} != target checkpoint slot {d}", .{
                 target_block.slot,
                 data.target.slot,
             });
@@ -765,14 +871,14 @@ pub const BeamChain = struct {
             current_slot; // Gossip attestations: no future slots allowed
 
         if (data.slot > max_allowed_slot) {
-            self.module_logger.debug("Attestation validation failed: attestation slot {d} > max allowed slot {d} (is_from_block={any})", .{
+            self.module_logger.debug("attestation validation failed: attestation slot {d} > max allowed slot {d} (is_from_block={any})", .{
                 data.slot,
                 max_allowed_slot,
                 is_from_block,
             });
             return AttestationValidationError.AttestationTooFarInFuture;
         }
-        self.module_logger.debug("Attestation validation passed: validator={d} slot={d} source={d} target={d} is_from_block={any}", .{
+        self.module_logger.debug("attestation validation passed: validator={d} slot={d} source={d} target={d} is_from_block={any}", .{
             attestation.validator_id,
             data.slot,
             data.source.slot,
