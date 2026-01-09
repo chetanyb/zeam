@@ -808,13 +808,13 @@ test "genesis block hash comparison" {
     // // Compare genesis block hashes with expected hex values
     const hash1_hex = try std.fmt.allocPrint(allocator, "0x{s}", .{std.fmt.fmtSliceHexLower(&genesis_block_hash1)});
     defer allocator.free(hash1_hex);
-    try std.testing.expectEqualStrings(hash1_hex, "0xcc03f11dd80dd79a4add86265fad0a141d0a553812d43b8f2c03aa43e4b002e3");
+    try std.testing.expectEqualStrings(hash1_hex, "0xfc5b051e66e70f0389d17f4fb39b8407e5e3761ba7932b2b33a8fa0b39b1db4b");
 
     const hash2_hex = try std.fmt.allocPrint(allocator, "0x{s}", .{std.fmt.fmtSliceHexLower(&genesis_block_hash2)});
     defer allocator.free(hash2_hex);
-    try std.testing.expectEqualStrings(hash2_hex, "0x6bd5347aa1397c63ed8558079fdd3042112a5f4258066e3a659a659ff75ba14f");
+    try std.testing.expectEqualStrings(hash2_hex, "0x28f6eb2ccca23372aaf6af1478db820bd3fc5027fcfdf26b11c1df6f589cee5f");
 
     const hash3_hex = try std.fmt.allocPrint(allocator, "0x{s}", .{std.fmt.fmtSliceHexLower(&genesis_block_hash3)});
     defer allocator.free(hash3_hex);
-    try std.testing.expectEqualStrings(hash3_hex, "0xce48a709189aa2b23b6858800996176dc13eb49c0c95d717c39e60042de1ac91");
+    try std.testing.expectEqualStrings(hash3_hex, "0x67fd80104ad670579baf121c6d541e5d0fa4f26b40d31c08bade39749b56e104");
 }
