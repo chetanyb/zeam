@@ -183,7 +183,7 @@ pub fn build(b: *Builder) !void {
         .optimize = optimize,
     });
     zeam_types.addImport("ssz", ssz);
-        zeam_types.addImport("hash-zig", hash_zig);
+    zeam_types.addImport("hash-zig", hash_zig);
     zeam_types.addImport("@zeam/params", zeam_params);
     zeam_types.addImport("@zeam/utils", zeam_utils);
     zeam_types.addImport("@zeam/metrics", zeam_metrics);
@@ -238,7 +238,7 @@ pub fn build(b: *Builder) !void {
     zeam_state_transition.addImport("@zeam/params", zeam_params);
     zeam_state_transition.addImport("@zeam/types", zeam_types);
     zeam_state_transition.addImport("ssz", ssz);
-        zeam_state_transition.addImport("hash-zig", hash_zig);
+    zeam_state_transition.addImport("hash-zig", hash_zig);
     zeam_state_transition.addImport("@zeam/api", zeam_api);
     zeam_state_transition.addImport("@zeam/xmss", zeam_xmss);
     zeam_state_transition.addImport("@zeam/key-manager", zeam_key_manager);
