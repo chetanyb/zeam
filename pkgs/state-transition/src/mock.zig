@@ -1,6 +1,7 @@
 const ssz = @import("ssz");
 const std = @import("std");
-const Sha256 = std.crypto.hash.sha2.Sha256;
+const hash_zig = @import("hash-zig");
+const PoseidonHasher = hash_zig.ssz.SszHasher;
 const Allocator = std.mem.Allocator;
 
 const params = @import("@zeam/params");
@@ -115,7 +116,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
         },
     };
     var block_root: types.Root = undefined;
-    try ssz.hashTreeRoot(Sha256, types.BeamBlock, genesis_block, &block_root, allocator);
+    try ssz.hashTreeRoot(PoseidonHasher, types.BeamBlock, genesis_block, &block_root, allocator);
 
     try blockList.append(gen_signed_block);
     try blockRootList.append(block_root);
@@ -145,7 +146,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
     for (1..numBlocks) |slot| {
         var parent_root: [32]u8 = undefined;
-        try ssz.hashTreeRoot(Sha256, types.BeamBlock, prev_block, &parent_root, allocator);
+        try ssz.hashTreeRoot(PoseidonHasher, types.BeamBlock, prev_block, &parent_root, allocator);
 
         const state_root: [32]u8 = types.ZERO_HASH;
         // const timestamp = genesis_config.genesis_time + slot * params.SECONDS_PER_SLOT;
@@ -297,7 +298,7 @@ pub fn genMockChain(allocator: Allocator, numBlocks: usize, from_genesis: ?types
 
         // prepare pre state to process block for that slot, may be rename prepare_pre_state
         try transition.apply_raw_block(allocator, &beam_state, &block, block_building_logger);
-        try ssz.hashTreeRoot(Sha256, types.BeamBlock, block, &block_root, allocator);
+        try ssz.hashTreeRoot(PoseidonHasher, types.BeamBlock, block, &block_root, allocator);
 
         // generate the signed beam block and add to block list
         const block_with_attestation = types.BlockWithAttestation{

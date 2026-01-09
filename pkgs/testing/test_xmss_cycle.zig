@@ -1,5 +1,6 @@
 const std = @import("std");
-const Sha256 = std.crypto.hash.sha2.Sha256;
+const hash_zig = @import("hash-zig");
+const PoseidonHasher = hash_zig.ssz.SszHasher;
 const xmss = @import("@zeam/xmss");
 const keymanager = @import("@zeam/key-manager");
 const types = @import("@zeam/types");
@@ -68,7 +69,7 @@ test "TestKeyManager: sign and verify attestation" {
 
     // Hash the attestation
     var message: [32]u8 = undefined;
-    try ssz.hashTreeRoot(Sha256, types.Attestation, attestation, &message, allocator);
+    try ssz.hashTreeRoot(PoseidonHasher, types.Attestation, attestation, &message, allocator);
 
     // Verify
     try xmss.verifySsz(
