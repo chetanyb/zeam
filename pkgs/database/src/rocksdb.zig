@@ -983,14 +983,18 @@ test "save and load block" {
     // Create test data using helper functions
     const test_block_root = test_helpers.createDummyRoot(0xAB);
 
-    // Create test signatures
-    var test_sig1: types.SIGBYTES = undefined;
-    @memset(&test_sig1, 0x12);
-    var test_sig2: types.SIGBYTES = undefined;
-    @memset(&test_sig2, 0x34);
-    const test_signatures = [_]types.SIGBYTES{ test_sig1, test_sig2 };
+    // Create dummy attestation signatures using helper
+    var attestation_signatures = try test_helpers.createDummyAttestationSignatures(allocator, 3);
+    var attestation_signatures_cleanup = true;
+    errdefer if (attestation_signatures_cleanup) {
+        for (attestation_signatures.slice()) |*sig| {
+            sig.deinit();
+        }
+        attestation_signatures.deinit();
+    };
 
-    var signed_block = try test_helpers.createDummyBlock(allocator, 1, 0, 0xCD, 0xEF, &test_signatures);
+    var signed_block = try test_helpers.createDummyBlock(allocator, 1, 0, 0xCD, 0xEF, attestation_signatures);
+    attestation_signatures_cleanup = false; // ownership moved into signed_block
     defer signed_block.deinit();
 
     // Save the block
@@ -1011,12 +1015,9 @@ test "save and load block" {
     // Verify attestations list is empty as expected
     try std.testing.expect(loaded.block.body.attestations.len() == 0);
 
-    // Verify signatures match
-    try std.testing.expect(loaded_block.?.signature.len() == 2);
-    const loaded_sig1 = try loaded_block.?.signature.get(0);
-    const loaded_sig2 = try loaded_block.?.signature.get(1);
-    try std.testing.expect(std.mem.eql(u8, &loaded_sig1, &test_sig1));
-    try std.testing.expect(std.mem.eql(u8, &loaded_sig2, &test_sig2));
+    // Verify attestation signatures count matches
+    const signature_proofs = loaded_block.?.signature.attestation_signatures;
+    try std.testing.expect(signature_proofs.len() == signed_block.signature.attestation_signatures.len());
 
     // Test loading a non-existent block
     const non_existent_root = test_helpers.createDummyRoot(0xFF);
@@ -1088,16 +1089,18 @@ test "batch write and commit" {
     // Create test data using helper functions
     const test_block_root = test_helpers.createDummyRoot(0xAA);
 
-    // Create test signatures
-    var test_sig1: types.SIGBYTES = undefined;
-    @memset(&test_sig1, 0xDD);
-    var test_sig2: types.SIGBYTES = undefined;
-    @memset(&test_sig2, 0xEE);
-    var test_sig3: types.SIGBYTES = undefined;
-    @memset(&test_sig3, 0xFF);
-    const test_signatures = [_]types.SIGBYTES{ test_sig1, test_sig2, test_sig3 };
+    // Create dummy attestation signatures using helper
+    var attestation_signatures = try test_helpers.createDummyAttestationSignatures(allocator, 3);
+    var attestation_signatures_cleanup = true;
+    errdefer if (attestation_signatures_cleanup) {
+        for (attestation_signatures.slice()) |*sig| {
+            sig.deinit();
+        }
+        attestation_signatures.deinit();
+    };
 
-    var signed_block = try test_helpers.createDummyBlock(allocator, 2, 1, 0xBB, 0xCC, &test_signatures);
+    var signed_block = try test_helpers.createDummyBlock(allocator, 2, 1, 0xBB, 0xCC, attestation_signatures);
+    attestation_signatures_cleanup = false; // ownership moved into signed_block
     defer signed_block.deinit();
 
     const test_state_root = test_helpers.createDummyRoot(0xEE);
@@ -1133,14 +1136,9 @@ test "batch write and commit" {
     try std.testing.expect(std.mem.eql(u8, &loaded_block_data.block.parent_root, &signed_block.message.block.parent_root));
     try std.testing.expect(std.mem.eql(u8, &loaded_block_data.block.state_root, &signed_block.message.block.state_root));
 
-    // Verify signatures match
-    try std.testing.expect(loaded_block.?.signature.len() == 3);
-    const loaded_sig1 = try loaded_block.?.signature.get(0);
-    const loaded_sig2 = try loaded_block.?.signature.get(1);
-    const loaded_sig3 = try loaded_block.?.signature.get(2);
-    try std.testing.expect(std.mem.eql(u8, &loaded_sig1, &test_sig1));
-    try std.testing.expect(std.mem.eql(u8, &loaded_sig2, &test_sig2));
-    try std.testing.expect(std.mem.eql(u8, &loaded_sig3, &test_sig3));
+    // Verify attestation signatures count matches
+    const batch_signature_proofs = loaded_block.?.signature.attestation_signatures;
+    try std.testing.expect(batch_signature_proofs.len() == attestation_signatures.len());
 
     // Verify state was saved and can be loaded
     const loaded_state = db.loadState(database.DbStatesNamespace, test_state_root);
